@@ -15,7 +15,7 @@ namespace Nori;
 /// a reference to the IGPU backend. A static accessor (RenderState.It) provides
 /// access during the transition period.
 class RenderState {
-   // Constructor ---------------------------------------------------------------
+   // Constructor --------------------------------------------------------------
    /// <summary>Create a RenderState attached to a particular GPU backend</summary>
    public RenderState (IGPU gpu) => mGPU = gpu;
 
@@ -31,21 +31,18 @@ class RenderState {
    public IGPU GPU => mGPU;
 
    /// <summary>Is blending enabled (tracked state, baked into pipeline)</summary>
-   public bool Blending { get => mBlending; set => Lib.Set (ref mBlending, value); }
+   public bool Blending { get => mBlending; set => mBlending = value; }
    bool mBlending;
 
    /// <summary>Is depth testing enabled (tracked state, baked into pipeline)</summary>
-   public bool DepthTest { get => mDepthTest; set => Lib.Set (ref mDepthTest, value); }
+   public bool DepthTest { get => mDepthTest; set => mDepthTest = value; }
    bool mDepthTest;
 
    /// <summary>Is polygon-offset-fill enabled (tracked state, baked into pipeline)</summary>
-   public bool PolygonOffsetFill {
-      get => mPolygonOffsetFill;
-      set => Lib.Set (ref mPolygonOffsetFill, value);
-   }
+   public bool PolygonOffsetFill { get => mPolygonOffsetFill; set => mPolygonOffsetFill = value; }
    bool mPolygonOffsetFill;
 
-   /// <summary>The stencil behavior of the current pipeline (tracked, baked into pipeline)</summary>
+   /// <summary>Stencil behavior of the current pipeline (tracked, baked into pipeline)</summary>
    public EStencilBehavior StencilBehavior {
       get => mStencilBehavior;
       set => mStencilBehavior = value;
