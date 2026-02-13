@@ -1,16 +1,35 @@
 // ────── ╔╗
 // ╔═╦╦═╦╦╬╣ FreeType.cs
-// ║║║║╬║╔╣║ Defines the FreeType class, with P-Invokes into the freetype.dll library
+// ║║║║╬║╔╣║ Defines the FreeType class, with P-Invokes into the freetype library
 // ╚╩═╩═╩╝╚╝ ───────────────────────────────────────────────────────────────────────────────────────
 namespace Nori.FreeType;
-using static CallingConvention;
+using System.Reflection;
 using Ptr = nint;
 
 #region class FreeType -----------------------------------------------------------------------------
 /// <summary>Class that encapsulates the FreeType library</summary>
-static class FreeType {
+static partial class FreeType {
    // Constants ----------------------------------------------------------------
-   const string DLL = "freetype.dll";
+   const string DLL = "freetype";
+
+   // Static constructor -------------------------------------------------------
+   static FreeType () {
+      NativeLibrary.SetDllImportResolver (typeof (FreeType).Assembly, ResolveLibrary);
+   }
+
+   static nint ResolveLibrary (string name, Assembly assembly, DllImportSearchPath? path) {
+      if (name != DLL) return 0;
+      if (OperatingSystem.IsWindows ()) {
+         if (NativeLibrary.TryLoad ("freetype.dll", assembly, path, out nint handle)) return handle;
+      } else if (OperatingSystem.IsMacOS ()) {
+         if (NativeLibrary.TryLoad ("libfreetype.6.dylib", assembly, path, out nint handle)) return handle;
+         if (NativeLibrary.TryLoad ("libfreetype.dylib", assembly, path, out nint handle2)) return handle2;
+      } else if (OperatingSystem.IsLinux ()) {
+         if (NativeLibrary.TryLoad ("libfreetype.so.6", assembly, path, out nint handle)) return handle;
+         if (NativeLibrary.TryLoad ("libfreetype.so", assembly, path, out nint handle2)) return handle2;
+      }
+      return 0;
+   }
 
    public enum Error {
       Ok = 0x00,
@@ -104,38 +123,38 @@ static class FreeType {
    }
 
    // Methods ------------------------------------------------------------------
-   [DllImport (DLL, EntryPoint = "FT_Get_Char_Index", CallingConvention = Cdecl)]
-   internal static extern uint GetCharIndex (HFace face, uint charcode);
+   [LibraryImport (DLL, EntryPoint = "FT_Get_Char_Index")]
+   internal static partial uint GetCharIndex (HFace face, uint charcode);
 
-   [DllImport (DLL, EntryPoint = "FT_Get_First_Char", CallingConvention = Cdecl)]
-   internal static extern uint GetFirstChar (HFace face, out uint agindex);
+   [LibraryImport (DLL, EntryPoint = "FT_Get_First_Char")]
+   internal static partial uint GetFirstChar (HFace face, out uint agindex);
 
-   [DllImport (DLL, EntryPoint = "FT_Get_Kerning", CallingConvention = Cdecl)]
-   internal static extern Error GetCharKerning (HFace face, uint left_glyph, uint right_glyph, uint kern_mode, out Vector26_6 akerning);
+   [LibraryImport (DLL, EntryPoint = "FT_Get_Kerning")]
+   internal static partial Error GetCharKerning (HFace face, uint left_glyph, uint right_glyph, uint kern_mode, out Vector26_6 akerning);
 
-   [DllImport (DLL, EntryPoint = "FT_Get_Next_Char", CallingConvention = Cdecl)]
-   internal static extern uint GetNextChar (HFace face, uint char_code, out uint agindex);
+   [LibraryImport (DLL, EntryPoint = "FT_Get_Next_Char")]
+   internal static partial uint GetNextChar (HFace face, uint char_code, out uint agindex);
 
-   [DllImport (DLL, EntryPoint = "FT_Init_FreeType", CallingConvention = Cdecl)]
-   internal static extern Error Init (out HLibrary library);
+   [LibraryImport (DLL, EntryPoint = "FT_Init_FreeType")]
+   internal static partial Error Init (out HLibrary library);
 
-   [DllImport (DLL, EntryPoint = "FT_Load_Glyph", CallingConvention = Cdecl)]
-   internal static extern Error LoadGlyph (HFace face, uint glyph_index, int load_flags);
+   [LibraryImport (DLL, EntryPoint = "FT_Load_Glyph")]
+   internal static partial Error LoadGlyph (HFace face, uint glyph_index, int load_flags);
 
-   [DllImport (DLL, EntryPoint = "FT_New_Face", CallingConvention = Cdecl, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
-   internal static extern Error NewFace (HLibrary library, string filepathname, int face_index, out HFace aface);
+   [LibraryImport (DLL, EntryPoint = "FT_New_Face", StringMarshalling = StringMarshalling.Utf8)]
+   internal static partial Error NewFace (HLibrary library, string filepathname, int face_index, out HFace aface);
 
-   [DllImport (DLL, EntryPoint = "FT_New_Memory_Face", CallingConvention = Cdecl)]
-   internal static extern Error NewFace (HLibrary library, Ptr file_base, int file_size, int face_index, out HFace aface);
+   [LibraryImport (DLL, EntryPoint = "FT_New_Memory_Face")]
+   internal static partial Error NewFace (HLibrary library, Ptr file_base, int file_size, int face_index, out HFace aface);
 
-   [DllImport (DLL, EntryPoint = "FT_Render_Glyph", CallingConvention = Cdecl)]
-   internal static extern Error RenderGlyph (IntPtr slot, int render_mode);
+   [LibraryImport (DLL, EntryPoint = "FT_Render_Glyph")]
+   internal static partial Error RenderGlyph (IntPtr slot, int render_mode);
 
-   [DllImport (DLL, EntryPoint = "FT_Set_Pixel_Sizes", CallingConvention = Cdecl)]
-   internal static extern Error SetPixelSizes (HFace face, uint width, uint height);
+   [LibraryImport (DLL, EntryPoint = "FT_Set_Pixel_Sizes")]
+   internal static partial Error SetPixelSizes (HFace face, uint width, uint height);
 
-   [DllImport (DLL, EntryPoint = "FT_Select_Charmap", CallingConvention = Cdecl)]
-   internal static extern Error SetEncoding (HFace face, FTEncoding encoding);
+   [LibraryImport (DLL, EntryPoint = "FT_Select_Charmap")]
+   internal static partial Error SetEncoding (HFace face, FTEncoding encoding);
 
    public static void Check (Error error) {
       if (error != Error.Ok) throw new Exception ($"FreeType error: {error}");
