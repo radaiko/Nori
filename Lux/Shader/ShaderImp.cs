@@ -1,123 +1,40 @@
-// ────── ╔╗                                                                                    WGL
+// ────── ╔╗                                                                                    LUX
 // ╔═╦╦═╦╦╬╣ ShaderImp.cs
-// ║║║║╬║╔╣║ ShaderImp is the low level wrapper around an OpenGL shader pipeline
+// ║║║║╬║╔╣║ ShaderImp is the low level metadata holder for a pre-compiled WebGPU pipeline
 // ╚╩═╩═╩╝╚╝ ───────────────────────────────────────────────────────────────────────────────────────
 using System.Runtime.CompilerServices;
-using System.Text;
 namespace Nori;
 
 #region class ShaderImp ----------------------------------------------------------------------------
-/// <summary>Wrapper around an OpenGL shader pipeline</summary>
+/// <summary>Metadata holder referencing a pre-compiled WebGPU render pipeline</summary>
+/// In the WebGPU model, all render state (blend, depth, stencil, polygon offset) is
+/// baked into an immutable pipeline object at creation time. ShaderImp stores the
+/// pipeline identifier and associated metadata (sort code, vertex spec, etc.) but
+/// does not compile or link any shaders itself — that is done by PipelineFactory.
 class ShaderImp {
    // Constructor --------------------------------------------------------------
-   /// <summary>Construct a pipeline given the code for the individual shaders</summary>
-   ShaderImp (string name, int sort, EMode mode, EVertexSpec vspec, string[] code, bool blend, bool depthTest, bool polyOffset, EStencilBehavior stencil) {
-      (Name, SortCode, Mode, VSpec, Blending, DepthTest, PolygonOffset, StencilBehavior, Handle)
-         = (name, sort, mode, vspec, blend, depthTest, polyOffset, stencil, GL.CreateProgram ());
-      code.ForEach (a => GL.AttachShader (Handle, sCache.Get (a, CompileShader)));
-      GL.LinkProgram (Handle);
-      string log2 = GL.GetProgramInfoLog (Handle);
-      if (GL.GetProgram (Handle, EProgramParam.LinkStatus) == 0)
-         throw new Exception ($"GLProgram link error in program '{Name}':\r\n{log2}");
-      if (!string.IsNullOrWhiteSpace (log2))
-         Lib.Trace ($"Warning while linking program '{Name}':\n{log2}\n");
-
-      // Get information about the uniforms
-      int cUniforms = GL.GetProgram (Handle, EProgramParam.ActiveUniforms);
-      mUniforms = new UniformInfo[cUniforms];
-      for (int i = 0; i < cUniforms; i++) {
-         GL.GetActiveUniform (Handle, i, out int _, out var type, out string uname, out int location);
-         object value = type switch {
-            EDataType.Int or EDataType.Sampler2D or EDataType.Sampler2DRect => 0,
-            EDataType.Vec2f => new Vec2F (0, 0),
-            EDataType.Vec4f => new Vec4F (0, 0, 0, 0),
-            EDataType.Float => 0f,
-            EDataType.Mat4f => Mat4F.Zero,
-            _ => throw new NotImplementedException ()
-         };
-         mUniformMap[uname] = location;
-         mUniforms[location] = new UniformInfo (uname, type, location, value);
-         if (uname == "LTypeTexture") MakeLTypeTexture ();
-      }
-   }
-   // A cache of already compiled individual shaders
-   static readonly Dictionary<string, HShader> sCache = [];
+   /// <summary>Construct a ShaderImp with the given metadata</summary>
+   ShaderImp (string name, int sort, EPipeline pipeline, EVertexSpec vspec, bool blend, bool depthTest, bool polyOffset, EStencilBehavior stencil)
+      => (Name, SortCode, Pipeline, VSpec, Blending, DepthTest, PolygonOffset, StencilBehavior)
+         = (name, sort, pipeline, vspec, blend, depthTest, polyOffset, stencil);
 
    // Properties ---------------------------------------------------------------
-   /// <summary>Enable blending when this program is used</summary>
+   /// <summary>Enable blending when this pipeline is used</summary>
    public readonly bool Blending;
-   /// <summary>Enable depth-testing when this program is used</summary>
+   /// <summary>Enable depth-testing when this pipeline is used</summary>
    public readonly bool DepthTest;
-   /// <summary>The OpenGL handle for this shader program (set up with GL.UseProgram)</summary>
-   public readonly HProgram Handle;
-   /// <summary>The primitive draw-mode used for this program</summary>
-   public readonly EMode Mode;
-   /// <summary>The name of this shader</summary>
+   /// <summary>The name of this shader pipeline</summary>
    public readonly string Name;
-   /// <summary>What is the special 'stencil-buffer' behavior of this program</summary>
-   public readonly EStencilBehavior StencilBehavior;
-   /// <summary>Enable polygon-offset-fill when this program is used</summary>
+   /// <summary>The pre-compiled WebGPU pipeline this shader references</summary>
+   public readonly EPipeline Pipeline;
+   /// <summary>Enable polygon-offset-fill when this pipeline is used</summary>
    public readonly bool PolygonOffset;
    /// <summary>The sorting code for this (determines order in which batches are dispatched)</summary>
    public readonly int SortCode;
+   /// <summary>What is the special 'stencil-buffer' behavior of this pipeline</summary>
+   public readonly EStencilBehavior StencilBehavior;
    /// <summary>The vertex-specification for this shader</summary>
    public readonly EVertexSpec VSpec;
-
-   /// <summary>The list of all the uniforms used by this shader</summary>
-   public IReadOnlyList<UniformInfo> Uniforms => mUniforms;
-
-   // Methods ------------------------------------------------------------------
-   /// <summary>Gets the Id of a uniform value</summary>
-   public int GetUniformId (string name) => mUniformMap.GetValueOrDefault(name, -1);
-
-   /// <summary>Sets a Uniform variable of type Color4 (we pass these as Vec4F)</summary>
-   public ShaderImp Set (int index, Color4 color)
-      => Set (index, (Vec4F)color);
-
-   /// <summary>Sets a Uniform variable of type float</summary>
-   public ShaderImp Set (int index, float f) {
-      if (index != -1) {
-         var data = mUniforms[index];
-         if (!f.EQ ((float)data.Value)) { data.Value = f; GL.Uniform (index, f); }
-      }
-      return this;
-   }
-
-   /// <summary>Sets a Uniform variable of type int</summary>
-   public ShaderImp Set (int index, int n) {
-      if (index != -1) {
-         var data = mUniforms[index];
-         if (n != (int)data.Value) { data.Value = n; GL.Uniform1i (index, n); }
-      }
-      return this;
-   }
-
-   /// <summary>Set a uniform of type Vec2f</summary>
-   public ShaderImp Set (int index, Vec2F v) {
-      if (index != -1) {
-         var data = mUniforms[index];
-         if (!v.EQ ((Vec2F)data.Value)) { data.Value = v; GL.Uniform (index, v.X, v.Y); }
-      }
-      return this;
-   }
-
-   /// <summary>Sets a uniform variable of type Vec4f</summary>
-   public ShaderImp Set (int index, Vec4F v) {
-      if (index != -1) {
-         var data = mUniforms[index];
-         if (!v.EQ ((Vec4F)data.Value)) { data.Value = v; GL.Uniform (index, v.X, v.Y, v.Z, v.W); }
-      }
-      return this;
-   }
-
-   /// <summary>Set a uniform of type Mat4f</summary>
-   public unsafe ShaderImp Set (int index, ref Mat4F m) {
-      if (index != -1) {
-         var data = mUniforms[index]; data.Value = m;
-         fixed (float* f = &m.M11) GL.Uniform (index, false, f);
-      }
-      return this;
-   }
 
    // Standard shaders ---------------------------------------------------------
    public static ShaderImp Bezier2D => mBezier2D ??= Load ();
@@ -149,129 +66,78 @@ class ShaderImp {
    public static ShaderImp Text3D => mText3D ??= Load ();
    static ShaderImp? mTextPx, mText2D, mText3D;
 
-   // Nested types ------------------------------------------------------------
-   /// <summary>Provides information about a Uniform</summary>
-   public class UniformInfo (string name, EDataType type, int location, object value) {
-      /// <summary>Name of this uniform</summary>
-      public readonly string Name = name;
-      /// <summary>Data-type of this uniform</summary>
-      public readonly EDataType Type = type;
-      /// <summary>Shader location for this uniform</summary>
-      public readonly int Location = location;
-      /// <summary>Last-set value for this uniform</summary>
-      public object Value = value;
-
-      public override string ToString ()
-         => $"Uniform({Location}) {Type} {Name}";
-   }
-
    // Implementation -----------------------------------------------------------
-   // Compiles an individual shader, given the source file (this reuses already compiled
-   // shaders where possible, since some shaders are part of multiple pipelines)
-   static HShader CompileShader (string file) {
-      var text = Lib.ReadText ($"nori:GL/Shader/{file}");
-      var eShader = Enum.Parse<EShader> (Path.GetExtension (file)[1..], true);
-      var shader = GL.CreateShader (eShader);
-      GL.ShaderSource (shader, text);
-      GL.CompileShader (shader);
-      if (GL.GetShader (shader, EShaderParam.CompileStatus) == 0) {
-         string log = GL.GetShaderInfoLog (shader);
-         throw new Exception ($"OpenGL shader compile error in '{file}':\r\n{log}");
-      }
-      return shader;
-   }
+   // Maps a shader name to the corresponding EPipeline enum value
+   static EPipeline ResolvePipeline (string name)
+      => name switch {
+         "Line2D" => EPipeline.Line2D,
+         "Line3D" => EPipeline.Line3D,
+         "Bezier2D" => EPipeline.Bezier2D,
+         "DashLine2D" => EPipeline.DashLine2D,
+         "Point2D" => EPipeline.Point2D,
+         "Point3D" => EPipeline.Point3D,
+         "Triangle2D" => EPipeline.Triangle2D,
+         "Quad2D" => EPipeline.Quad2D,
+         "BlackLine" => EPipeline.BlackLine,
+         "GlassLine" => EPipeline.GlassLine,
+         "Gourad" => EPipeline.Gourad,
+         "Phong" => EPipeline.Phong,
+         "PhongPink" => EPipeline.PhongPink,
+         "Pick" => EPipeline.Pick,
+         "Glass" => EPipeline.Glass,
+         "FlatFacet" => EPipeline.FlatFacet,
+         "TextPx" => EPipeline.TextPx,
+         "Text2D" => EPipeline.Text2D,
+         "Text3D" => EPipeline.Text3D,
+         "TriFanStencil" => EPipeline.TriFanStencil,
+         "TriFanCover" => EPipeline.TriFanCover,
+         _ => throw new BadCaseException (name)
+      };
 
-   // This loads the information for a particular shader from the Shader/Index.txt
-   // and builds it (that index contains the list of actual vertex / geometry / fragment
-   // programs)
+   // Loads metadata for a particular shader from Shader/Index.txt.
+   // Unlike the OpenGL version, this does NOT compile any shaders — it only
+   // reads metadata and resolves the EPipeline. Actual pipeline compilation
+   // is handled by PipelineFactory at startup.
    static ShaderImp Load ([CallerMemberName] string name = "") {
       sIndex ??= Lib.ReadLines ("nori:GL/Shader/Index.txt");
       // Each line in the index.txt contains these:
       // 0:Name  1:SortCode  2:Mode  3:VSpec  4:Blending  5:DepthTest  6:PolygonOffset  7:StencilBehavior  8:Programs
-      foreach (var line in sIndex) {
-         var w = line.Split (' ', StringSplitOptions.RemoveEmptyEntries);
+      foreach (string line in sIndex) {
+         string[] w = line.Split (' ', StringSplitOptions.RemoveEmptyEntries);
          if (w.Length >= 9 && w[0] == name) {
-            var sort = int.Parse (w[1]);
-            var mode = Enum.Parse<EMode> (w[2], true);
-            var vspec = Enum.Parse<EVertexSpec> (w[3], true);
+            int sort = int.Parse (w[1]);
+            // w[2] is Mode (OpenGL primitive topology) — ignored, WebGPU uses TriangleList for everything
+            EVertexSpec vspec = Enum.Parse<EVertexSpec> (w[3], true);
             bool blending = w[4] == "1", depthtest = w[5] == "1", offset = w[6] == "1";
-            var stencil = Enum.Parse<EStencilBehavior> (w[7], true);
-            var programs = w[8].Split ('|');
-            return new (name, sort, mode, vspec, programs, blending, depthtest, offset, stencil);
+            EStencilBehavior stencil = Enum.Parse<EStencilBehavior> (w[7], true);
+            EPipeline pipeline = ResolvePipeline (name);
+            return new (name, sort, pipeline, vspec, blending, depthtest, offset, stencil);
          }
       }
       throw new NotImplementedException ($"Shader {name} not found in Shader/Index.txt");
    }
    static string[]? sIndex;
 
-   // This is called exactly once in the application lifetime to make the line-type texture.
-   // We store the different line-type patterns in a texture. The t coordinate is used to select
-   // one of the different line-types and then the s coordinate is used to pick up the stipple
-   // pattern for that linetype.
-   static void MakeLTypeTexture () {
-      if (miLTypeTextureMade) return;
-      miLTypeTextureMade = true;
-      // We're always hardcoding that texture-unit 1 will be used for the linetype texture
-      // (just like texture unit 0 is used for truetype font texture)
-      GL.ActiveTexture (ETexUnit.Tex1);
-      HTexture idTexture = GL.GenTexture ();
-      GL.BindTexture (ETexTarget.Texture2D, idTexture);
-
-      byte[,] data = new byte[10, 60];
-      foreach (string s in mLTypeData) {
-         string[] w = s.Split ([' '], StringSplitOptions.RemoveEmptyEntries);
-         int n = (int)Enum.Parse<ELineType> (w[0], true);
-         for (int j = 0; j < 60; j++) data[n, j] = (w[1][j] == 'x') ? (byte)255 : (byte)0;
-      }
-      GL.PixelStore (EPixelStoreParam.UnpackAlignment, 1);
-      GL.TexImage2D (ETexTarget.Texture2D, EPixelInternalFormat.Red, 60, 10, EPixelFormat.Red, EPixelType.UByte, data);
-      GL.TexParameter (ETexTarget.Texture2D, ETexParam.MagFilter, (int)ETexFilter.Linear);
-      GL.TexParameter (ETexTarget.Texture2D, ETexParam.MinFilter, (int)ETexFilter.Linear);
-      GL.TexParameter (ETexTarget.Texture2D, ETexParam.WrapS, (int)ETexWrap.Repeat);
-   }
-   // This gets set to true once we have made the linetype texture
-   static bool miLTypeTextureMade;
-   // This defines the actual bit patterns for each of the linetypes
-   static readonly string[] mLTypeData = [
-      "Phantom     xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx....xxxxxxxx....xxxxxxxx....",
-      "Dash        xxxxxxxxxx.....xxxxxxxxxx.....xxxxxxxxxx.....xxxxxxxxxx.....",
-      "DashDotDot  xxxxxxxxxxxxxxxxxxxxxxxxxxxx........xxxx........xxxx........",
-      "Dot         xxx...xxx...xxx...xxx...xxx...xxx...xxx...xxx...xxx...xxx...",
-      "Dash2       xxxxxxxxxxxxxxxxxx............xxxxxxxxxxxxxxxxxx............",
-      "Hidden      xxxxxxx........xxxxxxx........xxxxxxx........xxxxxxx........",
-      "Center      xxxxxxxxxx......xxxx......xxxxxxxxxxxxxx......xxxx......xxxx",
-      "Border      xxxxxxxxxxxxxxxxx.....xxxxxxxxxxxxxxxxxx........xxxx........",
-      "DashDot     xxxxxxxxxxxxxxxxxxxx....xx....xxxxxxxxxxxxxxxxxxxx....xx....",
-      "Continuous  xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-   ];
-
-   public override string ToString () {
-      var sb = new StringBuilder ();
-      sb.Append ($"Shader {Name}\nUniforms:\n");
-      Uniforms.ForEach (a => sb.Append ($"  {a.Type} {a.Name}\n"));
-      return sb.ToString ();
-   }
-
-   // Private data -------------------------------------------------------------
-   readonly UniformInfo[] mUniforms;         // Set of uniforms for this program
-   // Dictionary mapping uniform names to uniform locations
-   readonly Dictionary<string, int> mUniformMap = new (StringComparer.OrdinalIgnoreCase);
+   public override string ToString ()
+      => $"Shader {Name} (Pipeline: {Pipeline})";
 }
 #endregion
 
 #region struct Attrib ------------------------------------------------------------------------------
-/// <summary>Attrib represents one attribute in a VAO buffer</summary>
-readonly record struct Attrib (int Dims, EDataType Type, int Size, bool Integral) {
-   public static Attrib AVec2f = new (2, EDataType.Float, 8, false);
-   public static Attrib AInt = new (1, EDataType.Int, 4, true);
-   public static Attrib AShort = new (1, EDataType.Short, 2, true);
-   public static Attrib AFloat = new (1, EDataType.Float, 4, false);
-   public static Attrib AVec3f = new (3, EDataType.Float, 12, false);
-   public static Attrib AVec4f = new (4, EDataType.Float, 16, false);
-   public static Attrib AVec3h = new (3, EDataType.Half, 6, false);
-   public static Attrib AVec4s = new (4, EDataType.Short, 8, true);
+/// <summary>Attrib represents one attribute in a vertex buffer</summary>
+/// Attrib is still used for metadata purposes — knowing vertex stride, component layout,
+/// and sizes — even though GL-specific attribute setup is no longer done here.
+readonly record struct Attrib (int Dims, int Size, bool Integral) {
+   public static Attrib AVec2f = new (2, 8, false);
+   public static Attrib AInt = new (1, 4, true);
+   public static Attrib AShort = new (1, 2, true);
+   public static Attrib AFloat = new (1, 4, false);
+   public static Attrib AVec3f = new (3, 12, false);
+   public static Attrib AVec4f = new (4, 16, false);
+   public static Attrib AVec3h = new (3, 6, false);
+   public static Attrib AVec4s = new (4, 8, true);
 
-   public static Attrib[] GetFor (EVertexSpec spec) => 
+   public static Attrib[] GetFor (EVertexSpec spec) =>
       spec switch {
          EVertexSpec.Vec2F => [AVec2f],
          EVertexSpec.Vec3F => [AVec3f],
@@ -282,7 +148,7 @@ readonly record struct Attrib (int Dims, EDataType Type, int Size, bool Integral
          _ => throw new BadCaseException (spec)
       };
 
-   public static int GetSize (EVertexSpec spec) => 
+   public static int GetSize (EVertexSpec spec) =>
       spec switch {
          EVertexSpec.Vec2F => 8,
          EVertexSpec.Vec3F => 12,
@@ -296,7 +162,7 @@ readonly record struct Attrib (int Dims, EDataType Type, int Size, bool Integral
 #endregion
 
 #region enum EVertexSpec ---------------------------------------------------------------------------
-// The various Vertex specifications used by OpenGL shaders
+/// <summary>The various vertex specifications used by shader pipelines</summary>
 enum EVertexSpec { Vec2F, Vec3F, Vec3F_Vec3H, Vec4S_Int, Vec2F_Vec4S_Int, Vec3F_Vec4S_Int, _Last }
 #endregion
 

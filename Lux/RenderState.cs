@@ -113,33 +113,10 @@ class RenderState {
    }
 
    /// <summary>Resolve the correct EPipeline for a given ShaderImp</summary>
-   /// Maps a ShaderImp name to the pre-compiled pipeline that includes all
-   /// baked-in render state (blend, depth, stencil, polygon offset).
+   /// Each ShaderImp stores its Pipeline enum directly (resolved at load time),
+   /// so this is now a simple field access.
    public EPipeline ResolvePipeline (ShaderImp pgm)
-      => pgm.Name switch {
-         "Line2D" => EPipeline.Line2D,
-         "Line3D" => EPipeline.Line3D,
-         "Bezier2D" => EPipeline.Bezier2D,
-         "DashLine2D" => EPipeline.DashLine2D,
-         "Point2D" => EPipeline.Point2D,
-         "Point3D" => EPipeline.Point3D,
-         "Triangle2D" => EPipeline.Triangle2D,
-         "Quad2D" => EPipeline.Quad2D,
-         "BlackLine" => EPipeline.BlackLine,
-         "GlassLine" => EPipeline.GlassLine,
-         "Gourad" => EPipeline.Gourad,
-         "Phong" => EPipeline.Phong,
-         "PhongPink" => EPipeline.PhongPink,
-         "Pick" => EPipeline.Pick,
-         "Glass" => EPipeline.Glass,
-         "FlatFacet" => EPipeline.FlatFacet,
-         "TextPx" => EPipeline.TextPx,
-         "Text2D" => EPipeline.Text2D,
-         "Text3D" => EPipeline.Text3D,
-         "TriFanStencil" => EPipeline.TriFanStencil,
-         "TriFanCover" => EPipeline.TriFanCover,
-         _ => throw new BadCaseException (pgm.Name)
-      };
+      => pgm.Pipeline;
 
    // Private data -------------------------------------------------------------
    readonly IGPU mGPU;
