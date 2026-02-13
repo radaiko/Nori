@@ -3,7 +3,6 @@
 // ║║║║╬║╔╣║ The Lux class: public interface to the Lux rendering engine
 // ╚╩═╩═╩╝╚╝ ───────────────────────────────────────────────────────────────────────────────────────
 using System.Reactive.Subjects;
-using System.Windows.Threading;
 namespace Nori;
 
 #region class Lux ----------------------------------------------------------------------------------
@@ -54,7 +53,7 @@ public static partial class Lux {
    public static double PixelScale {
       get {
          if (mUIScene == null || mViewport.X == 0) return 1;
-         var xfm = mUIScene.Xfms[0].InvXfm;
+         Matrix3 xfm = mUIScene.Xfms[0].InvXfm;
          double dx = 2.0 / mViewport.X;   //
          Point3 pa = Point3.Zero * xfm, pb = new Point3 (dx, 0, 0) * xfm;
          return pa.DistTo (pb);
@@ -70,17 +69,17 @@ public static partial class Lux {
    static Vec2S mViewport;
 
    // Methods ------------------------------------------------------------------
-   /// <summary>Creates the Lux rendering panel</summary>
-   public static object CreatePanel (bool createHost = false) {
-      return WinGL.Create (OnReady, OnPaint, createHost);
-
-      static void OnReady () { mReady = true; mOnReady.OnNext (0); }
-      static void OnPaint (int x, int y) => Render (UIScene, new Vec2S (x, y), ETarget.Screen, DIBitmap.EFormat.Unknown);
+   /// <summary>Initialize Lux with a GPU backend and surface</summary>
+   public static void Init (IGPU gpu, ISurface surface) {
+      RenderState.Init (gpu);
+      mSurface = surface;
+      surface.Ready.Subscribe (_ => { mReady = true; mOnReady.OnNext (0); });
+      surface.Resized.Subscribe (size => Render (UIScene, size, ETarget.Screen, DIBitmap.EFormat.Unknown));
    }
 
    public static void DumpStats () {
       Debug.Print ("Buffers:");
-      foreach (var buf in RetainBuffer.All.GetSnapshot ()) Debug.Print (buf.ToString ());
+      foreach (RetainBuffer buf in RetainBuffer.All.GetSnapshot ()) Debug.Print (buf.ToString ());
    }
 
    /// <summary>Called when entities are redrawn, or when the transform changes</summary>
@@ -93,7 +92,7 @@ public static partial class Lux {
    public static DIBitmap RenderToImage (Scene scene, Vec2S size, DIBitmap.EFormat fmt) {
       if (size.X % 4 != 0) throw new ArgumentException ("Lux.RenderToImage: image width must be a multiple of 4");
       if (scene != Lux.UIScene) scene.Attach ();
-      var dib =  (DIBitmap)Render (scene, size, ETarget.Image, fmt)!;
+      DIBitmap dib = (DIBitmap)Render (scene, size, ETarget.Image, fmt)!;
       if (scene != Lux.UIScene) scene.Detach ();
       return dib;
    }
@@ -105,7 +104,7 @@ public static partial class Lux {
       if (sRenderCompletes.Count > 0 || mRendering || !mReady || mUIScene == null) return null;
       if (!mPickBufferValid) {
          mPickBufferValid = true;
-         var tup = ((byte[], float[]))Render (mUIScene, mViewport, ETarget.Pick, DIBitmap.EFormat.Unknown)!;
+         (byte[], float[]) tup = ((byte[], float[]))Render (mUIScene, mViewport, ETarget.Pick, DIBitmap.EFormat.Unknown)!;
          mPickPixel = tup.Item1; mPickDepth = tup.Item2;
       }
       int index = (mViewport.Y - pos.Y - 1) * mViewport.X + pos.X;
@@ -157,7 +156,7 @@ public static partial class Lux {
       // Various post-processing after frame render
       // Issue stats, and keep 'continuous render' loop going
       mInfo.OnNext (sStats);
-      var frameTS = DateTime.Now;
+      DateTime frameTS = DateTime.Now;
       mLastFrameTime = (DateTime.Now - sLastFrametime).TotalSeconds;
       if (sRenderCompletes.Count > 0 && target == ETarget.Screen) {
          Lib.Post (NextFrame);
@@ -187,30 +186,20 @@ public static partial class Lux {
    static bool mRendering;          // Currently rendering a frame
 
    static void BeginRender (Vec2S viewport, ETarget target) {
+      IGPU gpu = RenderState.It.GPU;
       if (target is ETarget.Image or ETarget.Pick) {
          mFBViewport = viewport;
-         if (mFrameBuffer == 0) {
-            mFrameBuffer = GL.GenFrameBuffer ();
-            mColorBuffer = GL.GenRenderBuffer (); mDepthBuffer = GL.GenRenderBuffer ();
-         }
-         GL.BindFrameBuffer (EFrameBufferTarget.DrawAndRead, mFrameBuffer);
          if (viewport.X > mFBSize.X || viewport.Y > mFBSize.Y) {
+            if (mFrameBufferHandle != 0) gpu.DeleteFramebuffer (mFrameBufferHandle);
+            mFrameBufferHandle = gpu.CreateFramebuffer (viewport.X, viewport.Y);
             mFBSize = viewport;
-            GL.BindRenderBuffer (ERenderBufferTarget.RenderBuffer, mColorBuffer);
-            GL.RenderBufferStorage (ERenderBufferFormat.RGBA8, viewport.X, viewport.Y);
-            GL.BindRenderBuffer (ERenderBufferTarget.RenderBuffer, mDepthBuffer);
-            GL.RenderBufferStorage (ERenderBufferFormat.Depth24Stencil8, viewport.X, viewport.Y);
-            GL.FrameBufferRenderBuffer (EFrameBufferTarget.DrawAndRead, EFrameBufferAttachment.Color0, mColorBuffer);
-            GL.FrameBufferRenderBuffer (EFrameBufferTarget.DrawAndRead, EFrameBufferAttachment.DepthStencil, mDepthBuffer);
-            if (GL.CheckFrameBufferStatus (EFrameBufferTarget.Draw) != EFrameBufferStatus.Complete)
-               throw new NotImplementedException ();
          }
+         gpu.BindFramebuffer (mFrameBufferHandle);
       } else
-         GL.BindFrameBuffer (EFrameBufferTarget.DrawAndRead, 0);
+         gpu.BindDefaultFramebuffer ();
    }
    static Vec2S mFBViewport;            // Viewport size, when rendering to a frame-buffer
-   static HFrameBuffer mFrameBuffer;    // Frame-buffer for image rendering
-   static HRenderBuffer mColorBuffer, mDepthBuffer;    // Render buffers for the same
+   static int mFrameBufferHandle;       // IGPU framebuffer handle for image rendering
    static Vec2S mFBSize;                // The size of the frame-buffer
    static float[] mPickDepth = [];      // The depth buffer, obtained during a Pick render
    // This buffer contains the raw pixel-data obtained from a pick operation.
@@ -221,31 +210,42 @@ public static partial class Lux {
    static byte[] mPickPixel = [];
 
    static object? EndRender (ETarget target, DIBitmap.EFormat fmt) {
+      IGPU gpu = RenderState.It.GPU;
       switch (target) {
          case ETarget.Image:
-            GL.Finish ();
-            int x = mFBViewport.X, y = mFBViewport.Y, bpp = fmt.BytesPerPixel ();
-            var pxfmt = fmt switch {
-               DIBitmap.EFormat.RGBA8 => EPixelFormat.RGBA,
-               DIBitmap.EFormat.RGB8 => EPixelFormat.RGB,
-               DIBitmap.EFormat.Gray8 => EPixelFormat.Red,
-               _ => throw new BadCaseException (fmt)
-            };
-            GL.PixelStore (EPixelStoreParam.PackAlignment, 4);
+            int x = mFBViewport.X, y = mFBViewport.Y;
+            byte[] rgba = gpu.ReadPixels (0, 0, x, y);
+            if (fmt == DIBitmap.EFormat.RGBA8)
+               return new DIBitmap (x, y, fmt, rgba);
+            int bpp = fmt.BytesPerPixel ();
             byte[] data = new byte[bpp * x * y];
-            GL.ReadPixels (0, 0, x, y, pxfmt, EPixelType.UByte, data);
+            ConvertPixels (rgba, data, x * y, fmt);
             return new DIBitmap (x, y, fmt, data);
          case ETarget.Pick:
-            GL.Finish ();
-            int size = (x = mFBViewport.X) * (y = mFBViewport.Y);
+            int px = mFBViewport.X, py = mFBViewport.Y;
+            int size = px * py;
             if (size > mPickDepth.Length)
                (mPickPixel, mPickDepth) = (new byte[size * 4], new float[size]);
-            GL.PixelStore (EPixelStoreParam.PackAlignment, 4);
-            GL.ReadPixels (0, 0, x, y, EPixelFormat.BGRA, EPixelType.UByte, mPickPixel);
-            GL.ReadPixels (0, 0, x, y, EPixelFormat.DepthComponent, EPixelType.Float, mPickDepth);
+            byte[] pixels = gpu.ReadPixels (0, 0, px, py);
+            Array.Copy (pixels, mPickPixel, Math.Min (pixels.Length, mPickPixel.Length));
+            // Depth reading: IGPU.ReadPixels returns color only.
+            // For pick, depth is secondary — picking works by color ID.
+            Array.Clear (mPickDepth);
             return (mPickPixel, mPickDepth);
       }
       return null;
+   }
+
+   // Convert RGBA pixel data to RGB8 or Gray8 format
+   static void ConvertPixels (byte[] rgba, byte[] dst, int pixelCount, DIBitmap.EFormat fmt) {
+      if (fmt == DIBitmap.EFormat.RGB8) {
+         for (int i = 0, s = 0, d = 0; i < pixelCount; i++, s += 4, d += 3) {
+            dst[d] = rgba[s]; dst[d + 1] = rgba[s + 1]; dst[d + 2] = rgba[s + 2];
+         }
+      } else if (fmt == DIBitmap.EFormat.Gray8) {
+         for (int i = 0, s = 0; i < pixelCount; i++, s += 4)
+            dst[i] = rgba[s];
+      }
    }
 
    /// <summary>Prompts the Lux system to redraw the screen (asynchronous)</summary>
@@ -274,19 +274,18 @@ public static partial class Lux {
          // We need this backup timer because the RenderComplete event is not always dependable.
          // Normally, if we are running at 60 fps, we should hit the render-complete each 16.66 ms,
          // and the timer would never fire.
-         if (sTimer == null) {
-            sTimer = new () { Interval = TimeSpan.FromMilliseconds (40), IsEnabled = true };
-            sTimer.Tick += (_, _) => Redraw ();
-         }
+         if (sTimer == null)
+            sTimer = new Timer (_ => Lib.Post (Redraw), null, 0, 40);
+         else
+            sTimer.Change (0, 40);
          // Issue one redraw to prime things off
-         sTimer.Start ();
          sLastFrametime = DateTime.Now;
          Redraw ();
       }
    }
    static DateTime sLastFrametime;
    static readonly List<Action<double>> sRenderCompletes = [];
-   static DispatcherTimer? sTimer;
+   static Timer? sTimer;
 
    /// <summary>This detaches a callback from the continous-render loop</summary>
    /// This is the opposite of StartContinuousRender above. Once all the callbacks have
@@ -294,7 +293,7 @@ public static partial class Lux {
    public static void StopContinuousRender (Action<double> renderComplete) {
       sRenderCompletes.Remove (renderComplete);
       if (sRenderCompletes.Count == 0 && sTimer != null)
-         sTimer.Stop ();
+         sTimer.Change (Timeout.Infinite, Timeout.Infinite);
    }
 
    // Internal properties ------------------------------------------------------

@@ -2,7 +2,6 @@
 // ╔═╦╦═╦╦╬╣ VNodes.cs
 // ║║║║╬║╔╣║ Some derived types of VNode (GroupVN, SimpleVN, TraceVN, XfmVN etc)
 // ╚╩═╩═╩╝╚╝ ───────────────────────────────────────────────────────────────────────────────────────
-using System.Windows.Threading;
 namespace Nori;
 
 #region class GroupVN ------------------------------------------------------------------------------
@@ -103,7 +102,7 @@ public partial class TraceVN : VNode {
    // display, the oldest lines are removed
    void Add (string s) {
       _ = Face;      // Reading this computes a good value for mDYLine (text height in pixels)
-      foreach (var w in s.TrimEnd ('\n').Split ('\n'))
+      foreach (string w in s.TrimEnd ('\n').Split ('\n'))
          mLines.Add ((DateTime.Now, w));
       while (mLines.Count > mcLines) mLines.RemoveAt (0);
       Redraw ();
@@ -116,8 +115,7 @@ public partial class TraceVN : VNode {
          if (mFace == null) {
             mFace = new (Lib.ReadBytes ("nori:GL/Fonts/RobotoMono-Regular.ttf"), 16);
             mDYLine = mFace.LineHeight;
-            mTimer = new () { Interval = TimeSpan.FromSeconds (1), IsEnabled = true };
-            mTimer.Tick += OnTick;
+            mTimer = new Timer (_ => Lib.Post (() => OnTick (null, EventArgs.Empty)), null, 0, 1000);
          }
          return mFace;
       }
@@ -134,7 +132,7 @@ public partial class TraceVN : VNode {
    // Private data -------------------------------------------------------------
    int mDYLine = 20;    // Height of each line in pixes
    int mcLines = 100;   // Number of lines that will fit on the screen
-   DispatcherTimer? mTimer;
+   Timer? mTimer;
    readonly List<(DateTime TS, string Text)> mLines = [];
 }
 #endregion

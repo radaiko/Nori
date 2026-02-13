@@ -83,7 +83,7 @@ public class TypeFace {
 
    /// <summary>Handle for the entire Freetype library</summary>
    static HLibrary Library => sLazy2.Value;
-   static readonly Lazy<HLibrary> sLazy2 = new (() => { Check (Init (out var lib)); return lib; });
+   static readonly Lazy<HLibrary> sLazy2 = new (() => { Check (Init (out HLibrary lib)); return lib; });
 
    /// <summary>The line-to-line distance (in pixels)</summary>
    public int LineHeight => mLineHeight;
@@ -97,7 +97,7 @@ public class TypeFace {
          mPixelSize = value;
          Check (SetPixelSizes (mFace, (uint)value.X, (uint)value.Y));
          mRec = Marshal.PtrToStructure<CFace> ((Ptr)mFace);
-         var size = Marshal.PtrToStructure<SizeRec> (mRec.Size);
+         SizeRec size = Marshal.PtrToStructure<SizeRec> (mRec.Size);
          mLineHeight = (int)(size.Height.Value + 0.5);
          Bump ();
       }
@@ -119,13 +119,13 @@ public class TypeFace {
    /// delta from 0..95 starting at that character's TexOffset into this long linear buffer. That
    /// shader has to also then convert this 'linear offset' into S,T coordinates into that texture,
    /// but that is simple since these textures are always exactly 8192 pixels wide 
-   internal HTexture Texture {
+   internal int Texture {
       get {
          if (mTexture == 0) mTexture = BuildTexture ();
          return mTexture;
       }
    }
-   HTexture mTexture;
+   int mTexture;
 
    /// <summary>UID for this font (changes when the size changes!)</summary>
    public int UID => mUID;
@@ -140,7 +140,7 @@ public class TypeFace {
    /// The kerning adjustment is rounded to the nearest integer (since we cannot handle fractional
    /// pixel positionings of glyphs)
    public int GetKerning (uint idx0, uint idx1) {
-      GetCharKerning (mFace, idx0, idx1, 0, out var kerning);
+      GetCharKerning (mFace, idx0, idx1, 0, out Vector26_6 kerning);
       return (int)kerning.X.Value;
    }
 
@@ -162,9 +162,9 @@ public class TypeFace {
       uint idx0 = 0;
       int x = 0, y = 0;
       int xMin = 9999, yMin = 0, xMax = 0, yMax = 0;
-      foreach (var ch in text) {
+      foreach (char ch in text) {
          uint idx1 = GetGlyphIndex (ch);
-         var metric = GetMetrics (idx1);
+         Metrics metric = GetMetrics (idx1);
          int kern = GetKerning (idx0, idx1);
          int xChar = x + metric.LeftBearing + kern, yChar = y + metric.TopBearing;
          xMin = Math.Min (xMin, xChar); yMin = Math.Min (yMin, yChar - metric.Rows);
@@ -184,9 +184,9 @@ public class TypeFace {
       xpos.Clear ();
       uint idx0 = 0;
       int x = xstart; xpos.Add ((short)x);
-      foreach (var ch in text) {
+      foreach (char ch in text) {
          uint idx1 = GetGlyphIndex (ch);
-         var metric = GetMetrics (idx1);
+         Metrics metric = GetMetrics (idx1);
          int kern = GetKerning (idx0, idx1);
          x += metric.Advance + kern; xpos.Add ((short)x);
          idx0 = idx1;
@@ -196,7 +196,7 @@ public class TypeFace {
    /// <summary>Sets the 'M' size in pixels</summary>
    public void SetEMSizeInPixels (int pixels) {
       Check (SetPixelSizes (mFace, 1000, 1000));
-      var glyph = GetGlyph (GetGlyphIndex ('M'));
+      Glyph glyph = GetGlyph (GetGlyphIndex ('M'));
       uint size = (uint)(pixels * 1000.0 / glyph.Rows + 0.45);
       PixelSize = ((int)size, (int)size);
       double lie = -(double)mRec.Descender / (mRec.Ascender - mRec.Descender);
@@ -215,20 +215,24 @@ public class TypeFace {
    // Called whenever the font size is changed
    void Bump () {
       mNotes = null; mRawTexData = null;
-      if (mTexture != 0) { GL.DeleteTexture (mTexture); mTexture = HTexture.Zero; }
+      if (mTexture != 0) { RenderState.It.GPU.DeleteTexture (mTexture); mTexture = 0; }
       mUID = ++sNextUID;
    }
 
-   // Helper used to build the GL texture (from the mRawTexData byte-buffer we construct
-   // when we iterate through all the glyphs). 
-   HTexture BuildTexture () {
+   // Helper used to build the GPU texture (from the mRawTexData byte-buffer we construct
+   // when we iterate through all the glyphs). The raw data is single-channel (Red/coverage),
+   // so we expand it to RGBA for the IGPU.CreateTexture API.
+   int BuildTexture () {
       _ = Notes;  // This will also build the mRawTexData buffer
-      GL.ActiveTexture (ETexUnit.Tex0);
-      HTexture texture = GL.GenTexture ();
-      GL.BindTexture (ETexTarget.TexRectangle, texture);
-      GL.PixelStore (EPixelStoreParam.UnpackAlignment, 1);
       byte[] texData = mRawTexData!;
-      GL.TexImage2D (ETexTarget.TexRectangle, EPixelInternalFormat.Red, CXTex, texData.Length / CXTex, EPixelFormat.Red, EPixelType.UByte, texData);
+      int height = texData.Length / CXTex;
+      byte[] rgba = new byte[CXTex * height * 4];
+      for (int i = 0; i < texData.Length; i++) {
+         int j = i * 4;
+         rgba[j] = rgba[j + 1] = rgba[j + 2] = 255;
+         rgba[j + 3] = texData[i];  // Alpha = glyph coverage
+      }
+      int texture = RenderState.It.GPU.CreateTexture (CXTex, height, rgba);
       mRawTexData = null;
       return texture;
    }
@@ -259,7 +263,7 @@ public class TypeFace {
          if (mMap != null) return mMap;
          mMap = [];
          HashSet<uint> allGlyphs = [];
-         foreach (var e in Encodings) {
+         foreach (FTEncoding e in Encodings) {
             SetEncoding (e);
             uint charCode = GetFirstChar (mFace, out uint gindex);
             while (gindex != 0) {
@@ -280,20 +284,20 @@ public class TypeFace {
    // glyph-slot and then fetching the metrics). It also rasterizes the font, and fetches the
    // pixels of the glyph. All these glphs are loaded into the huge byte-array (mRawTexData),
    // and along with each glyph's notes, we also store the TexOffset into this array. 
-   // This big array can be turned into an OpenGL texture by simplying reading the HTexture
-   // property (which constructs the OpenGL texture, and then discards this byte-array, which
+   // This big array can be turned into a GPU texture by simply reading the Texture
+   // property (which constructs the GPU texture, and then discards this byte-array, which
    // is no longer needed). 
    unsafe Metrics[] Notes {
       get {
          if (mNotes != null) return mNotes;
-         var glyphIndices = AllGlyphs;
+         IReadOnlyList<uint> glyphIndices = AllGlyphs;
          uint max = glyphIndices.Max ();
          mNotes ??= new Metrics[max + 1];
          byte[] texData = new byte[131072];
          int texOffset = 0;
-         foreach (var index in glyphIndices) {
+         foreach (uint index in glyphIndices) {
             if (mNotes[index].TexOffset > 0) continue;
-            var g = GetGlyph (index);
+            Glyph g = GetGlyph (index);
             mNotes[index] = new Metrics (g, texOffset);
             int cb = g.Rows * g.Columns;
             if (cb > 0) {
