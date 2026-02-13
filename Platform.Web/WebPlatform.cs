@@ -13,6 +13,7 @@ public partial class WebPlatform : IPlatform {
       mCanvasId = canvasId;
       mInput.SetCanvasId (canvasId);
       mInput.Register ();
+      RegisterInstance ();
    }
 
    // Properties ---------------------------------------------------------------

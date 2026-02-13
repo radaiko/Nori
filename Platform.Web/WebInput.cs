@@ -105,6 +105,13 @@ partial class WebInput : IInput {
       sInstance.mMouseLeave.OnNext (0);
    }
 
+   /// <summary>Called from JavaScript when pointer capture is lost</summary>
+   [JSExport]
+   public static void OnPointerCaptureLost () {
+      if (sInstance == null) return;
+      sInstance.mMouseLost.OnNext (0);
+   }
+
    /// <summary>Register this instance as the singleton for JSExport callbacks</summary>
    internal void Register () => sInstance = this;
 

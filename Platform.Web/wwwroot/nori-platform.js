@@ -113,6 +113,10 @@ export const noriPlatform = {
          webInput.OnMouseLeave ();
       });
 
+      canvas.addEventListener ("lostpointercapture", (e) => {
+         webInput.OnPointerCaptureLost ();
+      });
+
       // Context menu suppression — right-click should not show browser menu
       canvas.addEventListener ("contextmenu", (e) => {
          e.preventDefault ();
