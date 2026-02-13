@@ -1,4 +1,4 @@
-// ────── ╔╗                                                                                    WGL
+// ────── ╔╗                                                                                      LUX
 // ╔═╦╦═╦╦╬╣ Lux.cs
 // ║║║║╬║╔╣║ The Lux class: public interface to the Lux rendering engine
 // ╚╩═╩═╩╝╚╝ ───────────────────────────────────────────────────────────────────────────────────────
@@ -29,10 +29,14 @@ public static partial class Lux {
    public static IObservable<int> OnReady => mOnReady;
    internal static Subject<int> mOnReady = new ();
 
+   /// <summary>The platform surface used for cursor visibility and redraw requests</summary>
+   public static ISurface? Surface { get => mSurface; set => mSurface = value; }
+   static ISurface? mSurface;
+
    /// <summary>Sets whether the cursor is visible or not when it is over the panel</summary>
    /// If this is set to false, then the current scene must 'paint' a cursor that follows
    /// the mouse movement
-   public static bool CursorVisible { set => HW.CursorVisible = value; }
+   public static bool CursorVisible { set { if (mSurface != null) mSurface.CursorVisible = value; } }
 
    /// <summary>The current scene that is bound to the visible viewport</summary>
    public static Scene? UIScene {
@@ -41,7 +45,7 @@ public static partial class Lux {
          mUIScene?.Detach ();
          BackFacesPink = false;
          mUIScene = value; mUIScene?.Attach (); mViewBound.OnNext (0); Redraw ();
-         HW.CursorVisible = mUIScene?.CursorVisible ?? true;
+         if (mSurface != null) mSurface.CursorVisible = mUIScene?.CursorVisible ?? true;
       }
    }
    static Scene? mUIScene;
@@ -245,7 +249,7 @@ public static partial class Lux {
    }
 
    /// <summary>Prompts the Lux system to redraw the screen (asynchronous)</summary>
-   public static void Redraw () => HW.Redraw ();
+   public static void Redraw () => mSurface?.Invalidate ();
 
    /// <summary>This is called to initiate 'continuous rendering'</summary>
    /// This function takes a 'callback' that will be invoked after each frame is rendered. Once

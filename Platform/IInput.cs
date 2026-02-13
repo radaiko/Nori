@@ -19,8 +19,8 @@ public interface IInput {
    IObservable<int> MouseLeave { get; }
    /// <summary>Fired when mouse capture is lost</summary>
    IObservable<int> MouseLost { get; }
-   /// <summary>Capture or release the mouse</summary>
-   void CaptureMouse (bool capture);
+   /// <summary>Capture or release the mouse, returns true if successful</summary>
+   bool CaptureMouse (bool capture);
    /// <summary>Is the SHIFT key currently pressed?</summary>
    bool IsShiftDown { get; }
    /// <summary>Is the CONTROL key currently pressed?</summary>

@@ -1,4 +1,4 @@
-// ────── ╔╗
+// ────── ╔╗                                                                                      LUX
 // ╔═╦╦═╦╦╬╣ MouseDragger.cs
 // ║║║║╬║╔╣║ Implements the MouseDragger base class and some widgets derived from that
 // ╚╩═╩═╩╝╚╝ ───────────────────────────────────────────────────────────────────────────────────────
@@ -15,19 +15,20 @@ public abstract class MouseDragger {
    /// - Then, for every drag of the mouse, Move() is called.
    /// - Finally, if the mouse button is released, End() is called (completion!).
    /// - If the ESC key is pressed, or capture is lost, Cancel() is called (cancellation!).
-   protected MouseDragger (Vec2S anchor) {
+   protected MouseDragger (IInput input, Vec2S anchor) {
+      mInput = input;
       mAnchor = mLast = mPt = anchor;
       // If we can't capture the mouse, we're done (no overrides like Start/End etc will be fired)
-      if (!HW.CaptureMouse (true)) return;
+      if (!mInput.CaptureMouse (true)) return;
       mObservers = new (
          // Forward mouse-moves to the Move override
-         HW.MouseMoves.Subscribe (pt => { mLast = mPt; Move (mPt = pt); }),
+         mInput.MouseMoves.Subscribe (pt => { mLast = mPt; Move (mPt = pt); }),
          // When the mouse button is released, stop dragging (completed)
-         HW.MouseClicks.Where (a => a.IsRelease).Subscribe (_ => Finish (true)),
+         mInput.MouseClicks.Where (a => a.IsRelease).Subscribe (_ => Finish (true)),
          // When the ESC key is pressed, stop dragging (cancelled)
-         HW.Keys.Where (a => a.IsPress (EKey.Escape)).Subscribe (_ => Finish (false)),
+         mInput.Keys.Where (a => a.IsPress (EKey.Escape)).Subscribe (_ => Finish (false)),
          // Whem mouse-capture is lost, stop dragging (cancelled)
-         HW.MouseLost.Subscribe (_ => Finish (false)));
+         mInput.MouseLost.Subscribe (_ => Finish (false)));
 
       // All captures set up, call the Start and Move event to initiate the drag cycle
       // NOTE: Do this asynchronously because this is still inside the constructor
@@ -53,6 +54,10 @@ public abstract class MouseDragger {
    public Vec2S LastPt => mLast;
    Vec2S mLast, mPt;
 
+   /// <summary>The input source used by this dragger</summary>
+   protected IInput Input => mInput;
+   readonly IInput mInput;
+
    // Implementation -----------------------------------------------------------
    void Finish (bool completed) {
       if (completed) End (); else Cancel ();
@@ -71,10 +76,12 @@ public abstract class MouseDragger {
 /// - When Ctrl+E is pressed on the keyboard, a 'Zoom-Extents' operation is done
 public class SceneManipulator {
    // Constructor --------------------------------------------------------------
-   public SceneManipulator () {
-      HW.MouseClicks.Where (a => a.IsPress).Subscribe (OnMouseClick);
-      HW.MouseWheel.Subscribe (OnMouseWheel);
-      HW.Keys.Where (a => a.IsPress ()).Subscribe (OnKey);
+   /// <summary>Constructs a SceneManipulator that receives input from the given IInput source</summary>
+   public SceneManipulator (IInput input) {
+      mInput = input;
+      mInput.MouseClicks.Where (a => a.IsPress).Subscribe (OnMouseClick);
+      mInput.MouseWheel.Subscribe (OnMouseWheel);
+      mInput.Keys.Where (a => a.IsPress ()).Subscribe (OnKey);
    }
 
    // Implementation -----------------------------------------------------------
@@ -92,22 +99,25 @@ public class SceneManipulator {
             if (Lux.Pick (mi.Position) is { } vnode) {
                if (vnode.Obj != null) sc.Picked (vnode.Obj);
             } else
-               new SceneRotator (sc3, mi.Position);
+               new SceneRotator (mInput, sc3, mi.Position);
          }
-         if (mi.Button == EMouseButton.Middle) 
-            new ScenePanner (sc, mi.Position);
+         if (mi.Button == EMouseButton.Middle)
+            new ScenePanner (mInput, sc, mi.Position);
       }
    }
 
    // Zoom in/out when the mouse wheel is rotated
    void OnMouseWheel (MouseWheelInfo mw)
       => Lux.UIScene?.Zoom (mw.Position, mw.Delta < 0 ? 0.95 : (1 / 0.95));
+
+   // Private data -------------------------------------------------------------
+   readonly IInput mInput;
 }
 #endregion
 
 #region class SceneRotator -------------------------------------------------------------------------
 /// <summary>MouseDragger widget used to rotate a 3D mScene</summary>
-class SceneRotator (Scene3 mScene, Vec2S anchor) : MouseDragger (anchor) {
+class SceneRotator (IInput input, Scene3 mScene, Vec2S anchor) : MouseDragger (input, anchor) {
    // Overrides ----------------------------------------------------------------
    // At start, capture the initial viewpoint of the Scene
    protected override void Start () => (mx0, mz0) = mScene.Viewpoint;
@@ -128,7 +138,7 @@ class SceneRotator (Scene3 mScene, Vec2S anchor) : MouseDragger (anchor) {
 
 #region class ScenePanner --------------------------------------------------------------------------
 /// <summary>MouseDragger widget used to pan the mScene</summary>
-class ScenePanner (Scene mScene, Vec2S anchor) : MouseDragger (anchor) {
+class ScenePanner (IInput input, Scene mScene, Vec2S anchor) : MouseDragger (input, anchor) {
    // Overrides ----------------------------------------------------------------
    // At start, capture the initial pan-vector of the mScene
    protected override void Start () => mPan0 = mScene.PanVector;
