@@ -15,8 +15,6 @@
    <ItemGroup>
       <ProjectReference Include="..\Core\Nori.Core.csproj" />
       <ProjectReference Include="..\Platform\Nori.Platform.csproj" />
-   </ItemGroup>
-   <ItemGroup>
-      <Compile Include="..\Lux\IGPU.cs" Link="IGPU.cs" />
+      <ProjectReference Include="..\Lux\Nori.Lux.csproj" />
    </ItemGroup>
 </Project>

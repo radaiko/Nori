@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+   <meta charset="utf-8" />
+   <title>Nori Demos</title>
+   <style>
+      html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: sans-serif; }
+      #app { display: flex; height: 100vh; }
+      #sidebar { width: 180px; background: #444; overflow-y: auto; flex-shrink: 0; }
+      #sidebar button { display: block; width: 100%; padding: 8px; margin: 2px 0;
+         border: none; background: #666; color: white; cursor: pointer; text-align: left; }
+      #sidebar button:hover { background: #888; }
+      #sidebar button.active { background: #0078d4; }
+      #canvas-container { flex: 1; position: relative; }
+      #noriCanvas { width: 100%; height: 100%; display: block; }
+      #settings { width: 200px; background: #555; overflow-y: auto; flex-shrink: 0; padding: 8px; color: white; }
+      #settings label { display: block; margin: 6px 0 2px; font-size: 12px; }
+      #settings input[type=range] { width: 100%; }
+      #settings button { display: block; width: 100%; padding: 6px; margin: 4px 0; }
+      #settings select { width: 100%; padding: 4px; }
+   </style>
+</head>
+<body>
+   <div id="app">
+      <div id="sidebar">
+         <!-- Demo buttons generated dynamically by Program.cs via JS interop -->
+      </div>
+      <div id="canvas-container">
+         <canvas id="noriCanvas"></canvas>
+      </div>
+      <div id="settings"></div>
+   </div>
+   <script src="_framework/blazor.webassembly.js" autostart="false"></script>
+   <script type="module">
+      import { noriPlatform } from './_content/Nori.Platform.Web/nori-platform.js';
+      // Make available globally for JSImport
+      globalThis.noriPlatform = noriPlatform;
+      await Blazor.start ();
+   </script>
+</body>
+</html>

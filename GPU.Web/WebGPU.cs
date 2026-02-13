@@ -214,6 +214,10 @@ public class WebGPU : IGPU {
       WriteInt (handle);
    }
 
+   // Initialization -----------------------------------------------------------
+   /// <summary>Initialize the WebGPU device and canvas context for the given canvas element</summary>
+   public static void Init (string canvasId) => NoriWebGPU.Init (canvasId);
+
    // Implementation -----------------------------------------------------------
    // Ensures there are at least 'bytes' bytes of space left in the command
    // buffer. If not, flushes the current batch to JS first.
