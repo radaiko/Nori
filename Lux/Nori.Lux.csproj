@@ -1,7 +1,7 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 		<OutDir>..\Bin</OutDir>
@@ -10,7 +10,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Core\Nori.Core.csproj" />
-    <ProjectReference Include="..\WGL\Nori.WGL.csproj" />
+    <ProjectReference Include="..\Platform\Nori.Platform.csproj" />
+    <ProjectReference Include="..\GPU\Nori.GPU.csproj" />
   </ItemGroup>
 
 	<ItemGroup>
