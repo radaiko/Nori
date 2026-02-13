@@ -1,297 +1,88 @@
 // ────── ╔╗                                                                                    LUX
 // ╔═╦╦═╦╦╬╣ IGPU.cs
-// ║║║║╬║╔╣║ GPU abstraction interface — isolates Lux from the underlying graphics API
+// ║║║║╬║╔╣║ GPU abstraction interface — backend-agnostic API for OpenGL and WebGPU
 // ╚╩═╩═╩╝╚╝ ───────────────────────────────────────────────────────────────────────────────────────
 namespace Nori;
 
-#region interface IGPU -------------------------------------------------------------------------------
-/// <summary>Abstracts all GPU operations that Lux needs, decoupling it from OpenGL or WebGPU</summary>
+#region interface IGPU -----------------------------------------------------------------------------
+/// <summary>Abstracts all GPU operations that Lux needs, decoupling it from any specific graphics API</summary>
 /// Lux uses this interface for all rendering. Implementations exist for OpenGL (via WGL)
-/// and WebGPU (via Nori.GPU). The interface mirrors the operations Lux actually performs:
-/// state management, shader compilation, buffer management, draw calls, textures,
-/// framebuffers, and pixel readback.
+/// and WebGPU (via Nori.GPU). The design follows WebGPU concepts: pipelines encapsulate
+/// all render state, uniforms are passed via bind groups, and there are no API-specific
+/// concepts like VAOs, individual uniform setters, or global enable/disable caps.
 public interface IGPU {
-   // State management ----------------------------------------------------------
+   // Viewport and presentation ------------------------------------------------
    /// <summary>Set the viewport rectangle (in pixels)</summary>
-   void Viewport (int x, int y, int width, int height);
+   void SetViewport (int x, int y, int w, int h);
 
-   /// <summary>Set the clear color</summary>
-   void ClearColor (float r, float g, float b, float a);
+   /// <summary>Clear the current render target to the specified color</summary>
+   void Clear (Color4 color);
 
-   /// <summary>Clear the specified buffers (color, depth, stencil)</summary>
-   void Clear (bool color, bool depth, bool stencil);
+   /// <summary>Present the current frame to the display</summary>
+   void Present ();
 
-   /// <summary>Enable or disable a GPU capability (blending, depth test, stencil test, etc.)</summary>
-   void Enable (EGPUCap cap, bool on);
+   // Buffer operations --------------------------------------------------------
+   /// <summary>Create a GPU buffer of the given size and return its handle</summary>
+   /// <param name="size">Size in bytes</param>
+   /// <param name="isIndex">True for an index buffer, false for a vertex buffer</param>
+   int CreateBuffer (int size, bool isIndex);
 
-   /// <summary>Set the blend function</summary>
-   void BlendFunc (EGPUBlendFactor src, EGPUBlendFactor dst);
+   /// <summary>Upload data to a previously created buffer</summary>
+   /// <param name="handle">Buffer handle returned by CreateBuffer</param>
+   /// <param name="data">Pointer to the source data</param>
+   /// <param name="size">Number of bytes to upload</param>
+   void UploadBuffer (int handle, nint data, int size);
 
-   /// <summary>Set the polygon offset parameters</summary>
-   void PolygonOffset (float factor, float units);
+   /// <summary>Delete a buffer and free its GPU memory</summary>
+   void DeleteBuffer (int handle);
 
-   /// <summary>Set the stencil operation for the specified face</summary>
-   void StencilOp (EGPUStencilOp sfail, EGPUStencilOp dpfail, EGPUStencilOp dppass);
+   // Pipeline operations ------------------------------------------------------
+   /// <summary>Set the active render pipeline (blend, depth, stencil state baked in)</summary>
+   /// <param name="pipelineIndex">Index into the set of pre-created pipelines</param>
+   void SetPipeline (int pipelineIndex);
 
-   /// <summary>Set the stencil function for the specified face</summary>
-   void StencilFunc (EGPUStencilFunc func, int refVal, uint mask);
+   /// <summary>Bind a vertex buffer for subsequent draw calls</summary>
+   void SetVertexBuffer (int bufferHandle, int offset);
 
-   /// <summary>Set the primitive restart index</summary>
-   void PrimitiveRestartIndex (uint index);
+   /// <summary>Bind an index buffer for subsequent draw calls</summary>
+   void SetIndexBuffer (int bufferHandle, int offset);
 
-   /// <summary>Set the number of vertices per tessellation patch</summary>
-   void PatchVertices (int count);
+   /// <summary>Bind a group of uniform data for the active pipeline</summary>
+   /// <param name="group">Bind group index (0, 1, 2, ...)</param>
+   /// <param name="data">Pointer to the uniform data</param>
+   /// <param name="size">Size of the uniform data in bytes</param>
+   void SetBindGroup (int group, nint data, int size);
 
-   /// <summary>Block until all GPU commands have completed</summary>
-   void Finish ();
+   /// <summary>Draw non-indexed primitives</summary>
+   void Draw (int vertexCount, int firstVertex);
 
-   // Shader operations ---------------------------------------------------------
-   /// <summary>Create a shader program and return its handle</summary>
-   int CreateProgram ();
+   /// <summary>Draw indexed primitives</summary>
+   void DrawIndexed (int indexCount, int firstIndex, int baseVertex);
 
-   /// <summary>Compile a shader of the given type from source and return its handle</summary>
-   int CompileShader (EGPUShaderType type, string source);
+   // Texture operations -------------------------------------------------------
+   /// <summary>Create a 2D RGBA texture from pixel data and return its handle</summary>
+   int CreateTexture (int width, int height, byte[] data);
 
-   /// <summary>Attach a compiled shader to a program</summary>
-   void AttachShader (int program, int shader);
+   /// <summary>Bind a texture to a slot for sampling in shaders</summary>
+   void BindTexture (int handle, int slot);
 
-   /// <summary>Link a shader program</summary>
-   void LinkProgram (int program);
+   /// <summary>Delete a texture and free its GPU memory</summary>
+   void DeleteTexture (int handle);
 
-   /// <summary>Get the link status of a program (true if successful)</summary>
-   bool GetProgramLinkStatus (int program);
+   // Framebuffer operations ---------------------------------------------------
+   /// <summary>Create an offscreen framebuffer with color and depth attachments</summary>
+   int CreateFramebuffer (int width, int height);
 
-   /// <summary>Get the info log for a program (link errors/warnings)</summary>
-   string GetProgramInfoLog (int program);
+   /// <summary>Bind an offscreen framebuffer as the render target</summary>
+   void BindFramebuffer (int handle);
 
-   /// <summary>Get the compile status of a shader (true if successful)</summary>
-   bool GetShaderCompileStatus (int shader);
+   /// <summary>Bind the default (screen) framebuffer as the render target</summary>
+   void BindDefaultFramebuffer ();
 
-   /// <summary>Get the info log for a shader (compile errors/warnings)</summary>
-   string GetShaderInfoLog (int shader);
+   /// <summary>Read pixels from the current framebuffer as RGBA bytes</summary>
+   byte[] ReadPixels (int x, int y, int width, int height);
 
-   /// <summary>Get the number of active uniforms in a program</summary>
-   int GetActiveUniformCount (int program);
-
-   /// <summary>Get information about the nth active uniform</summary>
-   void GetActiveUniform (int program, int index, out int size, out int type, out string name, out int location);
-
-   /// <summary>Set the active shader program</summary>
-   void UseProgram (int program);
-
-   /// <summary>Set a float uniform</summary>
-   void SetUniform (int location, float value);
-
-   /// <summary>Set an int uniform</summary>
-   void SetUniform1i (int location, int value);
-
-   /// <summary>Set a Vec2F uniform</summary>
-   void SetUniform (int location, float x, float y);
-
-   /// <summary>Set a Vec4F uniform</summary>
-   void SetUniform (int location, float x, float y, float z, float w);
-
-   /// <summary>Set a Mat4F uniform (4x4 matrix, column-major)</summary>
-   unsafe void SetUniformMatrix4 (int location, bool transpose, float* value);
-
-   // Buffer operations ---------------------------------------------------------
-   /// <summary>Generate a new buffer and return its handle</summary>
-   int GenBuffer ();
-
-   /// <summary>Bind a buffer to the specified target</summary>
-   void BindBuffer (EGPUBufferTarget target, int buffer);
-
-   /// <summary>Upload data to the currently bound buffer</summary>
-   void BufferData (EGPUBufferTarget target, int size, nint data, EGPUBufferUsage usage);
-
-   /// <summary>Map a range of the currently bound buffer for writing</summary>
-   nint MapBufferRange (EGPUBufferTarget target, int offset, int length, EGPUMapAccess access);
-
-   /// <summary>Unmap the currently mapped buffer</summary>
-   void UnmapBuffer (EGPUBufferTarget target);
-
-   /// <summary>Delete a buffer</summary>
-   void DeleteBuffer (int buffer);
-
-   // Vertex array operations ---------------------------------------------------
-   /// <summary>Generate a new vertex array object (VAO) and return its handle</summary>
-   int GenVertexArray ();
-
-   /// <summary>Bind a vertex array object</summary>
-   void BindVertexArray (int vao);
-
-   /// <summary>Delete a vertex array object</summary>
-   void DeleteVertexArray (int vao);
-
-   /// <summary>Define a floating-point vertex attribute</summary>
-   void VertexAttribPointer (int index, int dims, int type, bool normalized, int stride, int offset);
-
-   /// <summary>Define an integer vertex attribute</summary>
-   void VertexAttribIPointer (int index, int dims, int type, int stride, int offset);
-
-   /// <summary>Enable a vertex attribute array</summary>
-   void EnableVertexAttribArray (int index);
-
-   /// <summary>Disable a vertex attribute array</summary>
-   void DisableVertexAttribArray (int index);
-
-   // Draw calls ----------------------------------------------------------------
-   /// <summary>Draw primitives from array data</summary>
-   void DrawArrays (int mode, int first, int count);
-
-   /// <summary>Draw indexed primitives with a base vertex offset</summary>
-   void DrawElementsBaseVertex (int mode, int count, int indexType, int indexOffset, int baseVertex);
-
-   // Texture operations --------------------------------------------------------
-   /// <summary>Generate a new texture and return its handle</summary>
-   int GenTexture ();
-
-   /// <summary>Bind a texture to the specified target</summary>
-   void BindTexture (int target, int texture);
-
-   /// <summary>Delete a texture</summary>
-   void DeleteTexture (int texture);
-
-   /// <summary>Set the active texture unit</summary>
-   void ActiveTexture (int unit);
-
-   /// <summary>Set pixel store alignment parameters</summary>
-   void PixelStore (int param, int value);
-
-   /// <summary>Upload a 2D texture image</summary>
-   void TexImage2D (int target, int internalFormat, int width, int height, int pixelFormat, int pixelType, Array data);
-
-   /// <summary>Set a texture parameter (int value)</summary>
-   void TexParameter (int target, int param, int value);
-
-   // Framebuffer operations ----------------------------------------------------
-   /// <summary>Generate a new framebuffer and return its handle</summary>
-   int GenFrameBuffer ();
-
-   /// <summary>Bind a framebuffer</summary>
-   void BindFrameBuffer (int target, int framebuffer);
-
-   /// <summary>Generate a new renderbuffer and return its handle</summary>
-   int GenRenderBuffer ();
-
-   /// <summary>Bind a renderbuffer</summary>
-   void BindRenderBuffer (int target, int renderbuffer);
-
-   /// <summary>Allocate storage for a renderbuffer</summary>
-   void RenderBufferStorage (int format, int width, int height);
-
-   /// <summary>Attach a renderbuffer to the current framebuffer</summary>
-   void FrameBufferRenderBuffer (int target, int attachment, int renderbuffer);
-
-   /// <summary>Check the completeness status of a framebuffer</summary>
-   int CheckFrameBufferStatus (int target);
-
-   // Pixel readback ------------------------------------------------------------
-   /// <summary>Read pixels from the framebuffer into a byte array</summary>
-   void ReadPixels (int x, int y, int width, int height, int format, int type, byte[] data);
-
-   /// <summary>Read pixels from the framebuffer into a float array (for depth)</summary>
-   void ReadPixels (int x, int y, int width, int height, int format, int type, float[] data);
-}
-#endregion
-
-#region enum EGPUCap ---------------------------------------------------------------------------------
-/// <summary>GPU capabilities that can be enabled or disabled</summary>
-public enum EGPUCap {
-   /// <summary>Alpha blending</summary>
-   Blend,
-   /// <summary>Depth testing</summary>
-   DepthTest,
-   /// <summary>Stencil testing</summary>
-   StencilTest,
-   /// <summary>Polygon offset for filled primitives</summary>
-   PolygonOffsetFill,
-   /// <summary>Primitive restart (for strip/fan primitives)</summary>
-   PrimitiveRestart
-}
-#endregion
-
-#region enum EGPUShaderType --------------------------------------------------------------------------
-/// <summary>Types of shader stages</summary>
-public enum EGPUShaderType {
-   /// <summary>Vertex shader</summary>
-   Vertex,
-   /// <summary>Fragment (pixel) shader</summary>
-   Fragment,
-   /// <summary>Geometry shader</summary>
-   Geometry,
-   /// <summary>Tessellation control shader</summary>
-   TessControl,
-   /// <summary>Tessellation evaluation shader</summary>
-   TessEvaluation
-}
-#endregion
-
-#region enum EGPUBufferTarget ------------------------------------------------------------------------
-/// <summary>Buffer binding targets</summary>
-public enum EGPUBufferTarget {
-   /// <summary>Vertex attribute data</summary>
-   Array,
-   /// <summary>Element index data</summary>
-   ElementArray
-}
-#endregion
-
-#region enum EGPUBufferUsage -------------------------------------------------------------------------
-/// <summary>Hints for buffer data usage patterns</summary>
-public enum EGPUBufferUsage {
-   /// <summary>Data set once, drawn many times</summary>
-   StaticDraw,
-   /// <summary>Data set once, drawn at most a few times</summary>
-   StreamDraw
-}
-#endregion
-
-#region enum EGPUMapAccess ---------------------------------------------------------------------------
-/// <summary>Flags for buffer mapping access</summary>
-[Flags]
-public enum EGPUMapAccess {
-   /// <summary>Map for writing</summary>
-   Write = 1,
-   /// <summary>Do not synchronize (caller promises not to overwrite in-flight data)</summary>
-   Unsynchronized = 2
-}
-#endregion
-
-#region enum EGPUBlendFactor --------------------------------------------------------------------------
-/// <summary>Blend factor source/destination values</summary>
-public enum EGPUBlendFactor {
-   /// <summary>Factor is zero</summary>
-   Zero,
-   /// <summary>Factor is one</summary>
-   One,
-   /// <summary>Factor is source alpha</summary>
-   SrcAlpha,
-   /// <summary>Factor is (1 - source alpha)</summary>
-   OneMinusSrcAlpha
-}
-#endregion
-
-#region enum EGPUStencilOp ---------------------------------------------------------------------------
-/// <summary>Stencil buffer update operations</summary>
-public enum EGPUStencilOp {
-   /// <summary>Keep the current value</summary>
-   Keep,
-   /// <summary>Set the stencil value to zero</summary>
-   Zero,
-   /// <summary>Bitwise invert the current stencil value</summary>
-   Invert
-}
-#endregion
-
-#region enum EGPUStencilFunc -------------------------------------------------------------------------
-/// <summary>Stencil comparison functions</summary>
-public enum EGPUStencilFunc {
-   /// <summary>Never passes</summary>
-   Never,
-   /// <summary>Passes if (ref & mask) == (stencil & mask)</summary>
-   Equal,
-   /// <summary>Always passes</summary>
-   Always
+   /// <summary>Delete an offscreen framebuffer and its attachments</summary>
+   void DeleteFramebuffer (int handle);
 }
 #endregion

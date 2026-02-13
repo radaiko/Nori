@@ -1,0 +1,196 @@
+WGSL Pipeline Index — Nori.GPU
+================================================================================================
+Maps each of the 23 original GLSL pipelines to their WGSL equivalents.
+
+Geometry shader expansion strategy:
+  Lines    → Instanced quads (6 verts/instance via vertex_index), endpoints as per-instance data
+  Points   → Instanced quads (6 verts/instance via vertex_index), center as per-instance data
+  Text     → Instanced quads (6 verts/instance via vertex_index), char box as per-instance data
+
+Tessellation shader strategy:
+  Bezier2D → CPU pre-tessellation via Poly.Flatten(), then same pipeline as Line2D
+
+================================================================================================
+Name           Topology       VSpec            WGSL File       Blend  Depth  Stencil  Notes
+----------------------------------------------------------------------------------------------------------
+Line2D         TriangleList   Vec2F×2(inst)    Line2D.wgsl     Yes    No     None     6 verts/instance
+Line3D         TriangleList   Vec3F×2(inst)    Line3D.wgsl     Yes    Yes    None     6 verts/instance
+Bezier2D       TriangleList   Vec2F×2(inst)    Bezier2D.wgsl   Yes    No     None     CPU tessellation
+Point2D        TriangleList   Vec2F(inst)      Point2D.wgsl    Yes    No     None     6 verts/instance
+Point3D        TriangleList   Vec3F(inst)      Point3D.wgsl    Yes    No     None     6 verts/instance
+Triangle2D     TriangleList   Vec2F            Flat2D.wgsl     No     No     None     Direct triangles
+Quad2D         TriangleList   Vec2F            Flat2D.wgsl     No     No     None     CPU quad→2 tris
+BlackLine      TriangleList   Vec3F×2(inst)    Line3D.wgsl     Yes    Yes    None     Same as Line3D
+GlassLine      TriangleList   Vec3F×2(inst)    GlassLine.wgsl  Yes    Yes    None     Stippled line
+Gourad         TriangleList   Vec3F+Vec3H      Gourad.wgsl     No     Yes    None     Per-vertex lighting
+Phong          TriangleList   Vec3F+Vec3H      Phong.wgsl      No     Yes    None     Per-fragment lighting
+PhongPink      TriangleList   Vec3F+Vec3H      PhongPink.wgsl  No     Yes    None     Back-face = pink
+Pick           TriangleList   Vec3F+Vec3H      Pick.wgsl       No     Yes    None     ID-as-color
+Glass          TriangleList   Vec3F+Vec3H      Glass.wgsl      No     Yes    None     Stippled surface
+FlatFacet      TriangleList   Vec3F+Vec3H      FlatFacet.wgsl  No     Yes    None     Flat interpolation
+TextPx         TriangleList   Vec4S+Int(inst)   TextPx.wgsl    Yes    No     None     6 verts/instance
+DashLine2D     TriangleList   Vec2F×2(inst)    DashLine2D.wgsl Yes    No     None     + LType texture
+TriFanCover    TriangleList   Vec2F            Flat2D.wgsl     No     No     Cover    Stencil bit test
+TriFanStencil  TriangleList   Vec2F            Flat2D.wgsl     No     No     Stencil  Stencil bit invert
+Text2D         TriangleList   Vec2F+Vec4S+Int  Text2D.wgsl     Yes    No     None     6 verts/instance
+Text3D         TriangleList   Vec3F+Vec4S+Int  Text3D.wgsl     Yes    Yes    None     6 verts/instance
+
+================================================================================================
+Bind Group Layouts
+================================================================================================
+
+Group 0 — Per-pipeline uniforms (all pipelines):
+  @binding(0)  var<uniform> uniforms    Uniform buffer with pipeline-specific struct
+
+Additional bindings for specific pipelines:
+  DashLine2D:
+    @binding(1)  var ltype_texture       texture_2d<f32>   Line-type pattern texture
+    @binding(2)  var ltype_sampler       sampler           Sampler for line-type texture
+  TextPx, Text2D, Text3D:
+    @binding(1)  var font_texture        texture_2d<f32>   Font glyph atlas
+    @binding(2)  var font_sampler        sampler           Sampler for font texture
+
+================================================================================================
+Uniform Buffer Layouts (per pipeline)
+================================================================================================
+
+Flat2D (Triangle2D, Quad2D, TriFanStencil, TriFanCover):
+  offset  0: xfm          mat4x4<f32>   (64 bytes)
+  offset 64: draw_color   vec4<f32>     (16 bytes)
+  Total: 80 bytes
+
+Line2D, Bezier2D:
+  offset  0: xfm          mat4x4<f32>   (64 bytes)
+  offset 64: vp_scale     vec2<f32>     (8 bytes)
+  offset 72: line_width   f32           (4 bytes)
+  offset 76: _pad0        f32           (4 bytes)
+  offset 80: draw_color   vec4<f32>     (16 bytes)
+  Total: 96 bytes
+
+Line3D, BlackLine:
+  (same layout as Line2D)
+
+GlassLine:
+  (same layout as Line3D)
+
+DashLine2D:
+  offset   0: xfm          mat4x4<f32>   (64 bytes)
+  offset  64: vp_scale     vec2<f32>     (8 bytes)
+  offset  72: line_width   f32           (4 bytes)
+  offset  76: lt_scale     f32           (4 bytes)
+  offset  80: draw_color   vec4<f32>     (16 bytes)
+  offset  96: line_type    f32           (4 bytes)
+  offset 100: _pad0..2     3x f32        (12 bytes, padding to 16-byte boundary)
+  Total: 112 bytes
+
+Point2D:
+  offset  0: xfm          mat4x4<f32>   (64 bytes)
+  offset 64: vp_scale     vec2<f32>     (8 bytes)
+  offset 72: point_size   f32           (4 bytes)
+  offset 76: _pad0        f32           (4 bytes)
+  offset 80: draw_color   vec4<f32>     (16 bytes)
+  Total: 96 bytes
+
+Point3D:
+  (same layout as Point2D)
+
+Gourad, Glass:
+  offset   0: xfm          mat4x4<f32>   (64 bytes)
+  offset  64: normal_xfm   mat4x4<f32>   (64 bytes)
+  offset 128: draw_color   vec4<f32>     (16 bytes)
+  Total: 144 bytes
+
+Phong, PhongPink, FlatFacet, Pick:
+  (same layout as Gourad)
+
+TextPx:
+  offset  0: vp_scale     vec2<f32>     (8 bytes)
+  offset  8: _pad         vec2<f32>     (8 bytes)
+  offset 16: draw_color   vec4<f32>     (16 bytes)
+  Total: 32 bytes
+
+Text2D:
+  offset  0: xfm          mat4x4<f32>   (64 bytes)
+  offset 64: vp_scale     vec2<f32>     (8 bytes)
+  offset 72: _pad         vec2<f32>     (8 bytes)
+  offset 80: draw_color   vec4<f32>     (16 bytes)
+  Total: 96 bytes
+
+Text3D:
+  (same layout as Text2D)
+
+================================================================================================
+Vertex Buffer Layouts (per pipeline)
+================================================================================================
+
+Instanced line pipelines (Line2D, Line3D, BlackLine, GlassLine, DashLine2D, Bezier2D):
+  Buffer 0, step=instance:
+    @location(0) p0  — vec2<f32> or vec3<f32>  (8 or 12 bytes)
+    @location(1) p1  — vec2<f32> or vec3<f32>  (8 or 12 bytes)
+  No vertex buffer (vertices generated from vertex_index 0..5)
+
+Instanced point pipelines (Point2D, Point3D):
+  Buffer 0, step=instance:
+    @location(0) pos — vec2<f32> or vec3<f32>  (8 or 12 bytes)
+  No vertex buffer (vertices generated from vertex_index 0..5)
+
+Direct triangle pipelines (Triangle2D, Quad2D, TriFanStencil, TriFanCover):
+  Buffer 0, step=vertex:
+    @location(0) pos — vec2<f32>  (8 bytes)
+
+3D facet pipelines (Gourad, Phong, PhongPink, Pick, Glass, FlatFacet):
+  Buffer 0, step=vertex:
+    @location(0) position — vec3<f32>  (12 bytes, padded to 16 for alignment)
+    @location(1) normal   — vec3<f32>  (12 bytes, via Vec3H expanded to f32)
+
+Instanced text pipelines (TextPx):
+  Buffer 0, step=instance:
+    @location(0) char_box   — vec4<i32>  (from Vec4S, 8 bytes as shorts → 16 as i32)
+    @location(1) tex_offset — i32        (4 bytes)
+
+Instanced text pipelines (Text2D):
+  Buffer 0, step=instance:
+    @location(0) pos        — vec2<f32>  (8 bytes)
+    @location(1) char_box   — vec4<i32>  (from Vec4S, 8 bytes as shorts → 16 as i32)
+    @location(2) tex_offset — i32        (4 bytes)
+
+Instanced text pipelines (Text3D):
+  Buffer 0, step=instance:
+    @location(0) pos        — vec3<f32>  (12 bytes)
+    @location(1) char_box   — vec4<i32>  (from Vec4S, 8 bytes as shorts → 16 as i32)
+    @location(2) tex_offset — i32        (4 bytes)
+
+================================================================================================
+Migration Notes
+================================================================================================
+
+1. GEOMETRY SHADERS → INSTANCED QUADS
+   All geometry shaders (Line2D.geom, Line3D.geom, Point2D.geom, Point3D.geom,
+   Text2D.geom, Text3D.geom, DashLine2D.geom, FlatFacet.geom) are replaced by
+   instanced rendering. Each instance draws 6 vertices (2 triangles forming a quad)
+   using vertex_index to select corner positions. This is more efficient than
+   geometry shaders on modern GPUs.
+
+   For FlatFacet, the geometry shader averaged normals for flat shading. In WGSL,
+   we use @interpolate(flat) which uses the provoking vertex's value. For best
+   results, the CPU should provide per-face normals rather than per-vertex normals.
+
+2. TESSELLATION SHADERS → CPU PRE-TESSELLATION
+   Bezier.tctrl + Bezier.teval are removed. Bezier curves are tessellated on the
+   CPU using Nori.Core's Poly.Flatten() method, which already exists and produces
+   line segments. The resulting segments use the same Line2D instanced pipeline.
+
+3. TOPOLOGY CHANGES
+   Original GLSL used Lines, Points, Patches, Quads, and TriangleFan primitives.
+   WebGPU supports only: PointList, LineList, LineStrip, TriangleList, TriangleStrip.
+   - Lines → TriangleList (via instanced quads)
+   - Points → TriangleList (via instanced quads)
+   - Patches → TriangleList (via CPU tessellation + instanced quads)
+   - Quads → TriangleList (CPU converts quads to 2 triangles)
+   - TriangleFan → TriangleList (CPU converts fan to triangle list)
+   - Triangles → TriangleList (no change)
+
+4. TEXTURE FORMATS
+   - Font texture: Uses textureLoad() (integer coordinates) instead of textureSample()
+     since the original GLSL used texelFetch() with sampler2DRect.
+   - Line-type texture: Uses textureSample() with standard 2D sampler.

@@ -13,6 +13,9 @@
       <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
    </PropertyGroup>
    <ItemGroup>
+      <EmbeddedResource Include="Shaders\**\*.wgsl" />
+   </ItemGroup>
+   <ItemGroup>
       <ProjectReference Include="..\Core\Nori.Core.csproj" />
       <ProjectReference Include="..\Platform\Nori.Platform.csproj" />
    </ItemGroup>
