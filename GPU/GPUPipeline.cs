@@ -4,6 +4,28 @@
 // ╚╩═╩═╩╝╚╝ ───────────────────────────────────────────────────────────────────────────────────────
 namespace Nori;
 
+#region struct GPUStencilConfig ----------------------------------------------------------------------
+/// <summary>Configures stencil operations for a render pipeline</summary>
+public struct GPUStencilConfig {
+   /// <summary>Stencil comparison function for front faces</summary>
+   public CompareFunction FrontCompare;
+   /// <summary>Operation when stencil test passes for front faces</summary>
+   public StencilOperation FrontPassOp;
+   /// <summary>Operation when stencil test fails for front faces</summary>
+   public StencilOperation FrontFailOp;
+   /// <summary>Stencil comparison function for back faces</summary>
+   public CompareFunction BackCompare;
+   /// <summary>Operation when stencil test passes for back faces</summary>
+   public StencilOperation BackPassOp;
+   /// <summary>Operation when stencil test fails for back faces</summary>
+   public StencilOperation BackFailOp;
+   /// <summary>Bitmask for stencil read operations</summary>
+   public uint ReadMask;
+   /// <summary>Bitmask for stencil write operations</summary>
+   public uint WriteMask;
+}
+#endregion
+
 #region struct GPUVertexLayout ------------------------------------------------------------------------
 /// <summary>Describes the layout of vertex attributes for a pipeline</summary>
 public struct GPUVertexLayout {
@@ -89,7 +111,9 @@ public unsafe class GPUPipeline : IDisposable {
       TextureFormat depthFormat = TextureFormat.Depth24PlusStencil8,
       PrimitiveTopology topology = PrimitiveTopology.TriangleList,
       BindGroupLayout*[]? bindGroupLayouts = null,
-      string? label = null) {
+      string? label = null,
+      GPUStencilConfig? stencil = null,
+      ColorWriteMask colorWriteMask = ColorWriteMask.All) {
 
       GPUPipeline pipe = new () { mGPU = gpu };
 
@@ -158,7 +182,7 @@ public unsafe class GPUPipeline : IDisposable {
          };
          ColorTargetState colorTarget = new () {
             Format = colorFormat,
-            WriteMask = ColorWriteMask.All,
+            WriteMask = colorWriteMask,
             Blend = enableBlend ? &blendState : null
          };
          FragmentState fragmentState = new () {
@@ -169,22 +193,26 @@ public unsafe class GPUPipeline : IDisposable {
          };
 
          // Depth stencil state
+         bool useDepthStencil = enableDepth || stencil.HasValue;
+         GPUStencilConfig sc = stencil ?? default;
          DepthStencilState depthStencil = new () {
             Format = depthFormat,
-            DepthWriteEnabled = true,
-            DepthCompare = CompareFunction.Less,
+            DepthWriteEnabled = enableDepth,
+            DepthCompare = enableDepth ? CompareFunction.Less : CompareFunction.Always,
             StencilFront = new StencilFaceState {
-               Compare = CompareFunction.Always,
-               FailOp = StencilOperation.Keep,
+               Compare = stencil.HasValue ? sc.FrontCompare : CompareFunction.Always,
+               FailOp = stencil.HasValue ? sc.FrontFailOp : StencilOperation.Keep,
                DepthFailOp = StencilOperation.Keep,
-               PassOp = StencilOperation.Keep
+               PassOp = stencil.HasValue ? sc.FrontPassOp : StencilOperation.Keep
             },
             StencilBack = new StencilFaceState {
-               Compare = CompareFunction.Always,
-               FailOp = StencilOperation.Keep,
+               Compare = stencil.HasValue ? sc.BackCompare : CompareFunction.Always,
+               FailOp = stencil.HasValue ? sc.BackFailOp : StencilOperation.Keep,
                DepthFailOp = StencilOperation.Keep,
-               PassOp = StencilOperation.Keep
-            }
+               PassOp = stencil.HasValue ? sc.BackPassOp : StencilOperation.Keep
+            },
+            StencilReadMask = stencil.HasValue ? sc.ReadMask : 0xFFu,
+            StencilWriteMask = stencil.HasValue ? sc.WriteMask : 0xFFu
          };
 
          // Assemble render pipeline descriptor
@@ -198,7 +226,7 @@ public unsafe class GPUPipeline : IDisposable {
                FrontFace = FrontFace.Ccw,
                CullMode = CullMode.None
             },
-            DepthStencil = enableDepth ? &depthStencil : null,
+            DepthStencil = useDepthStencil ? &depthStencil : null,
             Multisample = new MultisampleState {
                Count = 1,
                Mask = ~0u,
