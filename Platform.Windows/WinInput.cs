@@ -70,13 +70,13 @@ class WinInput : IInput {
    public IObservable<int> MouseLost => mMouseLost;
 
    /// <summary>Is the SHIFT key currently pressed?</summary>
-   public bool IsShiftDown => (GetKeyState (VK_SHIFT) & PRESSED) != 0;
+   public bool IsShiftDown => (Win32.GetKeyState (Win32.VK_SHIFT) & Win32.PRESSED) != 0;
 
    /// <summary>Is the CONTROL key currently pressed?</summary>
-   public bool IsCtrlDown => (GetKeyState (VK_CONTROL) & PRESSED) != 0;
+   public bool IsCtrlDown => (Win32.GetKeyState (Win32.VK_CONTROL) & Win32.PRESSED) != 0;
 
    /// <summary>Is the ALT key currently pressed?</summary>
-   public bool IsAltDown => (GetKeyState (VK_ALT) & PRESSED) != 0;
+   public bool IsAltDown => (Win32.GetKeyState (Win32.VK_ALT) & Win32.PRESSED) != 0;
 
    // Methods ------------------------------------------------------------------
    /// <summary>Capture or release the mouse, returns true if successful</summary>
@@ -98,10 +98,6 @@ class WinInput : IInput {
    }
 
    // Implementation -----------------------------------------------------------
-   const int PRESSED = 0x8000;
-   const int VK_CONTROL = 0x11, VK_SHIFT = 0x10, VK_ALT = 0x12;
-   [DllImport ("user32.dll")]
-   static extern ushort GetKeyState (int key);
 
    // Private data -------------------------------------------------------------
    UserControl? mPanel;
@@ -236,17 +232,12 @@ class MouseClicksWrap : PanelEventWrapper<MouseClickInfo> {
    void Process (MouseEventArgs e, EKeyState state) {
       if (!sMap.TryGetValue (e.Button, out EMouseButton btn)) return;
       EKeyModifier mods = EKeyModifier.None;
-      if ((GetKeyState (VK_CONTROL) & PRESSED) != 0) mods |= EKeyModifier.Control;
-      if ((GetKeyState (VK_SHIFT) & PRESSED) != 0) mods |= EKeyModifier.Shift;
-      if ((GetKeyState (VK_ALT) & PRESSED) != 0) mods |= EKeyModifier.Alt;
+      if ((Win32.GetKeyState (Win32.VK_CONTROL) & Win32.PRESSED) != 0) mods |= EKeyModifier.Control;
+      if ((Win32.GetKeyState (Win32.VK_SHIFT) & Win32.PRESSED) != 0) mods |= EKeyModifier.Shift;
+      if ((Win32.GetKeyState (Win32.VK_ALT) & Win32.PRESSED) != 0) mods |= EKeyModifier.Alt;
       Vec2S position = new (e.X, e.Y);
       Push (new (btn, position, mods, state));
    }
-
-   const int PRESSED = 0x8000;
-   const int VK_CONTROL = 0x11, VK_SHIFT = 0x10, VK_ALT = 0x12;
-   [DllImport ("user32.dll")]
-   static extern ushort GetKeyState (int key);
 
    static readonly Dictionary<MouseButtons, EMouseButton> sMap = new () {
       [MouseButtons.Left] = EMouseButton.Left,
@@ -281,5 +272,15 @@ class MouseWheelWrap : PanelEventWrapper<MouseWheelInfo> {
 
    void OnMouseWheel (object? sender, MouseEventArgs e)
       => Push (new (e.Delta, new (e.X, e.Y)));
+}
+#endregion
+
+#region static class Win32 -------------------------------------------------------------------------
+// Shared P/Invoke declarations for user32.dll
+static class Win32 {
+   internal const int PRESSED = 0x8000;
+   internal const int VK_CONTROL = 0x11, VK_SHIFT = 0x10, VK_ALT = 0x12;
+   [DllImport ("user32.dll")]
+   internal static extern ushort GetKeyState (int key);
 }
 #endregion

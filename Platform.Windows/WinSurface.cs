@@ -29,7 +29,7 @@ class WinSurface : UserControl, ISurface {
 
    /// <summary>Show or hide the cursor over the surface</summary>
    bool ISurface.CursorVisible {
-      set => Cursor = value ? Cursors.Default : sEmptyCursor;
+      set => Cursor = value ? Cursors.Default : EmptyCursor;
    }
 
    /// <summary>Fired when the surface is resized</summary>
