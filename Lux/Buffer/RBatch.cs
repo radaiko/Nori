@@ -1,4 +1,4 @@
-// ────── ╔╗
+// ────── ╔╗                                                                                    LUX
 // ╔═╦╦═╦╦╬╣ RBatch.cs
 // ║║║║╬║╔╣║ RBatch (render-batch) represents a set of vertices in a RetainBuffer / StreamBuffer
 // ╚╩═╩═╩╝╚╝ ───────────────────────────────────────────────────────────────────────────────────────
@@ -17,7 +17,7 @@ namespace Nori;
 ///   populated by that Shader's SnapUniforms method)
 /// - Start and Count indicating the start offset and number of vertices in that
 ///   buffer, both in terms of 'vertex units', not in terms of bytes
-/// - Streaming indicates if this batch of vertices is stored in a RetainBuffer (long 
+/// - Streaming indicates if this batch of vertices is stored in a RetainBuffer (long
 ///   term storage, reused on multiple frames) or a StreamBuffer (transient vertices used only
 ///   on one frame)
 struct RBatch : IIndexed {
@@ -36,9 +36,9 @@ struct RBatch : IIndexed {
    /// with no change (other than possibly some attributes like transform, color etc).
    /// Those belong in an RBuffer. However, some drawing is very transient (for example
    /// most stuff connected to the mouse cursor, widget feedback etc). These transient
-   /// artifacts are drawn using a StreamBuffer and such batches are tagged with 
+   /// artifacts are drawn using a StreamBuffer and such batches are tagged with
    /// Streaming=true (these are basically batches coming from VNodes that are themselves
-   /// tagged as streaming). 
+   /// tagged as streaming).
    public bool Streaming;
 
    /// <summary>The shader this RBatch uses</summary>
@@ -97,7 +97,7 @@ struct RBatch : IIndexed {
    /// RBatch's count in Issue()
    public static void IssueAll () {
       Sort ();
-      mStreaming.Clear (); 
+      mStreaming.Clear ();
       for (int i = 0, n = Staging.Count; i < n; i++) {
          var (b0, u0) = Staging[i];
          ref RBatch rb0 = ref mAll[b0];
@@ -112,7 +112,7 @@ struct RBatch : IIndexed {
                if (rb1.Streaming) mStreaming.Add (b1);
                count += rb1.Count;
                i = j;
-            } else 
+            } else
                break;
          }
 
@@ -192,11 +192,11 @@ struct RBatch : IIndexed {
       return true;
    }
 
-   // This is called to 'issue' this batch (the actual DrawArrays or DrawElements)
+   // This is called to 'issue' this batch (the actual Draw or DrawIndexed)
    readonly void Issue (ushort nUniform, int count) {
       var shader = Shader.Get (NShader);
       if (!Lux.IsPicking) {
-         // Select the program used by this batch. If this same program has already
+         // Select the pipeline used by this batch. If this same pipeline has already
          // been selected, this is a no-op. Because we have already sorted the batches by
          // program, these expensive changes to the current pipeline are quite rare
          GLState.Program = shader.Pgm;
@@ -214,10 +214,10 @@ struct RBatch : IIndexed {
          // using a 'false-color' which is basically just the VNode Id
          var (picker, uniforms) = (PickShader.It, fsh.GetUniforms (nUniform));
          Color4 color = Color4.White;
-         if (VNode.SafeGet (IDVNode) is { } vnode) { 
+         if (VNode.SafeGet (IDVNode) is { } vnode) {
             // Compute the false color based on the VNode Id. Note that we are not using
             // the lowest two bits of R, G, B in this (to work correctly even with display
-            // modes that use restricted colors with just 6 bits per color component). 
+            // modes that use restricted colors with just 6 bits per color component).
             int r = (vnode.Id & 63) << 2, g = (vnode.Id >> 4) & 252, b = (vnode.Id >> 10) & 252;
             color = new (r, g, b);
          }
@@ -225,43 +225,30 @@ struct RBatch : IIndexed {
          PickShader.It.ApplyUniforms (uniforms.IDXfm, color);
       }
 
-        // Select the VAO this batch uses as the current VAO. If this VAO
-      // is already selected, this is a no-op
+      // Bind the vertex buffer this batch uses. The RenderState tracks the current
+      // binding to avoid redundant calls
       var buffer = RetainBuffer.All[NBuffer];
-      GLState.VAO = buffer.VAO;
+      RenderState.It.VertexBinding = buffer.VertexBuffer;
 
       if (ICount > 0) {
          // If we are using indexed drawing mode, we ignore the count that is passed
          // in, and use this.ICount as the number of elements to draw
-         buffer.Draw (shader.Pgm.Mode, Offset, IOffset, ICount);
+         buffer.Draw (Offset, IOffset, ICount);
       } else {
-         // If ICount = 0: we are using simple DrawArrays.
+         // If ICount = 0: we are using simple Draw.
          // We have to draw 'count' vertices starting at this batch's vertex
          // offset (byte offset within that buffer). Note that we are not using
          // this RBatch's count, but the count is passed in from outside. This
          // is because IssueAll() sees if this batch and the subsequent one(s)
-         // all use the same shader, VAO and uniforms and thus can be merged into
+         // all use the same shader, buffer and uniforms and thus can be merged into
          // a larger single draw.
-         buffer.Draw (shader.Pgm.Mode, Offset, count);
+         buffer.Draw (Offset, count);
       }
       // Update stats
       mVertsDrawn += count;
       mDrawCalls++;
    }
    internal static int mDrawCalls, mVertsDrawn;
-
-   // This is called to issue a set of streaming batches
-   void IssueStreaming (int nUniform, List<int> ids) {
-      // Select the program used by this set of streaming batches
-      var shader = Shader.Get (NShader);
-      GLState.Program = shader.Pgm;
-      // Set the shader constants (stuff like VPScale that does not change for each batch).
-      // This is a no-op except for the first time this shader is used in this frame.
-      shader.SetConstants ();
-      // Ask the shader to apply the uniforms for this set of batches
-      shader.ApplyUniforms (nUniform);
-
-   }
 
    // This is called to sort the RBatches before we draw them.
    // This sorts the batches with these keys (in descending order of importance):
@@ -280,8 +267,8 @@ struct RBatch : IIndexed {
       // sort the entire array, but sort only 'batch-sized' sections of it.
       // Some experimentation shows that a batch size of between 200 to 600 seems to work
       // the best. For now, this is 256. As the batch size increases, sort time will increase.
-      // As the batch size decreases, OpenGL state-transition time will increase (we'll spend
-      // more time swapping between shaders, uniforms etc).
+      // As the batch size decreases, GPU state-transition time will increase (we'll spend
+      // more time swapping between pipelines, uniforms etc).
       int batch = 256;
       int n = (Staging.Count + batch - 1) / batch;
       for (int i = 0; i < n; i++) {
@@ -295,7 +282,7 @@ struct RBatch : IIndexed {
          ref RBatch rb = ref mAll[b];
          if (rb.NBuffer == 0 && !rb.Streaming) {
             // If the data of this RBatch has still not been uploaded to the GPU,
-            // allocate a RB,,uffer and copy the data there
+            // allocate a RBuffer and copy the data there
             var shader = Shader.Get (rb.NShader);
             var buf = RetainBuffer.Get (shader.Pgm.VSpec);
             rb.NBuffer = buf.Idx;

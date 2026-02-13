@@ -1,12 +1,12 @@
-// ────── ╔╗                                                                                    WGL
+// ────── ╔╗                                                                                    LUX
 // ╔═╦╦═╦╦╬╣ Buffer.cs
-// ║║║║╬║╔╣║ Implements RetainBuffer (VAO wrapper), StreamBuffer (streaming GL buffer)
+// ║║║║╬║╔╣║ Implements RetainBuffer (GPU buffer wrapper), StreamBuffer (CPU-staged streaming)
 // ╚╩═╩═╩╝╚╝ ───────────────────────────────────────────────────────────────────────────────────────
 namespace Nori;
 using Ptr = nint;
 
 #region class RetainBuffer -------------------------------------------------------------------------
-/// <summary>A wrapper around a VertexArrayObject (VAO), used for 'retained mode' drawing</summary>
+/// <summary>A wrapper around GPU vertex/index buffers, used for 'retained mode' drawing</summary>
 /// We can store vertex data in a RetainBuffer, if we intend to keep that data constant and
 /// reuse it over multiple frames. The other alternative is StreamBuffer, that is used to
 /// send data to the GPU that is only going to be used for drawing once. Both have broadly
@@ -31,9 +31,9 @@ class RetainBuffer : IIndexed {
    }
    int mReferences;
 
-   /// <summary>GL handle to the VAO (allocated by PushToGPU)</summary>
-   public HVertexArray VAO => mHVAO;
-   HVertexArray mHVAO;
+   /// <summary>IGPU handle for the vertex buffer (allocated by PushToGPU)</summary>
+   public int VertexBuffer => mVertexBuffer;
+   int mVertexBuffer;
 
    /// <summary>The vertex specification for this buffer (layout of each vertex in it)</summary>
    public EVertexSpec VSpec {
@@ -68,16 +68,21 @@ class RetainBuffer : IIndexed {
       return n;
    }
 
-   /// <summary>Draws data from the VAO using a simple DrawArrays call</summary>
-   public void Draw (EMode mode, int offset, int count) {
+   /// <summary>Draws data from the vertex buffer using a simple Draw call (non-indexed)</summary>
+   public void Draw (int offset, int count) {
       PushToGPU ();
-      GL.DrawArrays (mode, offset / mcbVertex, count);
+      IGPU gpu = RenderState.It.GPU;
+      gpu.SetVertexBuffer (mVertexBuffer, 0);
+      gpu.Draw (count, offset / mcbVertex);
    }
 
-   /// <summary>Draws data from the VAO using a more complex DrawElements call (indexed drawing)</summary>
-   public void Draw (EMode mode, int offset, int ioffset, int icount) {
+   /// <summary>Draws data from the vertex/index buffers using indexed drawing</summary>
+   public void Draw (int offset, int ioffset, int icount) {
       PushToGPU ();
-      GL.DrawElementsBaseVertex (mode, icount, EIndexType.UInt, ioffset * 4, offset / mcbVertex);
+      IGPU gpu = RenderState.It.GPU;
+      gpu.SetVertexBuffer (mVertexBuffer, 0);
+      gpu.SetIndexBuffer (mIndexBuffer, 0);
+      gpu.DrawIndexed (icount, ioffset, offset / mcbVertex);
    }
 
    /// <summary>Gets a currently open RetainBuffer corresponding to a given vertex-spec</summary>
@@ -91,53 +96,46 @@ class RetainBuffer : IIndexed {
    static readonly RetainBuffer?[] mBySpec = new RetainBuffer?[(int)EVertexSpec._Last];
 
    // Implementation -----------------------------------------------------------
-   // Release the VAO after use.
-   // A VAO is released after all the RBatch objects pointing into it are
+   // Release the buffers after use.
+   // Buffers are released after all the RBatch objects pointing into them are
    // released (when this.References goes down to zero)
    public void Release () {
-      if (GLState.VAO == mHVAO) GLState.VAO = 0;
-      GL.DeleteBuffer (mHVertex); GL.DeleteBuffer (mHIndex); GL.DeleteVertexArray (mHVAO);
-      mHVertex = mHIndex = HBuffer.Zero; mHVAO = HVertexArray.Zero;
+      IGPU gpu = RenderState.It.GPU;
+      if (mVertexBuffer != 0) gpu.DeleteBuffer (mVertexBuffer);
+      if (mIndexBuffer != 0) gpu.DeleteBuffer (mIndexBuffer);
+      mVertexBuffer = 0; mIndexBuffer = 0;
       All.Release (Idx);
    }
 
    // Called to transmit the data to the GPU.
-   // The first time this is called, it allocates a VAO (vertex-array-object), copies
-   // the data into that and transmits it to the GPU. Subsequent calls simply bind the
-   // VAO object as the current one to use
+   // The first time this is called, it allocates GPU buffers, copies the data
+   // into them and uploads to the GPU. Subsequent calls are a no-op since the
+   // data is already on the GPU
    unsafe void PushToGPU () {
-      if (mHVAO != 0) { GLState.VAO = mHVAO; return; }
-      GLState.VAO = mHVAO = GL.GenVertexArray ();
-      GL.BindBuffer (EBufferTarget.Array, mHVertex = GL.GenBuffer ());
+      if (mVertexBuffer != 0) return;
+      IGPU gpu = RenderState.It.GPU;
+
+      // Create and upload vertex buffer
+      mVertexBuffer = gpu.CreateBuffer (mUsed, false);
       fixed (void* p = &mData[0])
-         GL.BufferData (EBufferTarget.Array, mUsed, (Ptr)p, EBufferUsage.StaticDraw);
+         gpu.UploadBuffer (mVertexBuffer, (Ptr)p, mUsed);
       PushedVerts = mUsed;
 
-      GL.BindBuffer (EBufferTarget.ElementArray, mHIndex = GL.GenBuffer ());
-      fixed (void* p = &mIndex[0])
-         GL.BufferData (EBufferTarget.ElementArray, mIndexUsed * 4, (Ptr)p, EBufferUsage.StaticDraw);
+      // Create and upload index buffer
+      if (mIndexUsed > 0) {
+         mIndexBuffer = gpu.CreateBuffer (mIndexUsed * 4, true);
+         fixed (void* p = &mIndex[0])
+            gpu.UploadBuffer (mIndexBuffer, (Ptr)p, mIndexUsed * 4);
+      }
+
       mData = null!; mIndex = null!; mBySpec[(int)VSpec] = null;
       mUsed = mIndexUsed = 0;
-
-      // Note that doing all this attribute-setting here works because all this is part of
-      // the state of the currently selected VAO. That is, the VAO not only tags a particular
-      // 'vertex buffer' and a particular 'index buffer' as being the current ones, but also
-      // set up the set of vertex attributes (the type of each component of the 'vertex' 
-      // structure) and enables as many vertex attributes as we are using. 
-      int index = 0, offset = 0;
-      var attribs = Attrib.GetFor (VSpec);
-      foreach (var a in attribs) {
-         if (a.Integral) GL.VertexAttribIPointer (index, a.Dims, a.Type, mcbVertex, offset);
-         else GL.VertexAttribPointer (index, a.Dims, a.Type, false, mcbVertex, offset);
-         GL.EnableVertexAttribArray (index);
-         index++; offset += a.Size;
-      }
       PushID = ++mNextPushID;
    }
    public int PushID, PushedVerts;
    static int mNextPushID;
 
-   public override string ToString () 
+   public override string ToString ()
       => $"RBuffer Idx:{Idx}, Spec:{VSpec}, Push:{PushedVerts} bytes @ {PushID}";
 
    // Private data -------------------------------------------------------------
@@ -146,94 +144,51 @@ class RetainBuffer : IIndexed {
    int[] mIndex = new int[128];     // Indices storage
    int mIndexUsed;                  // How many elements of the Indices array are used
 
-   HBuffer mHVertex;                // GL handle to the vertex data storage buffer
-   HBuffer mHIndex;                 // GL handle to the index buffer (used only if indexed drawing)
+   int mIndexBuffer;                // IGPU handle for the index buffer
 }
 #endregion
 
 #region class StreamBuffer -------------------------------------------------------------------------
-/// <summary>StreamBuffer implements lock-free streaming to OpenGL</summary>
-/// For full details on this, see the "Buffer Object Streaming" page on the Khronos OpenGL
-/// Wiki (https://www.khronos.org/opengl/wiki/Buffer_Object_Streaming). In particular, note
-/// the section on "Buffer Update". 
+/// <summary>StreamBuffer implements CPU-staged streaming to the GPU via IGPU</summary>
+/// The original OpenGL version used glMapBufferRange with UNSYNCHRONIZED for lock-free
+/// streaming. WebGPU does not expose that pattern, so instead we maintain a CPU-side
+/// staging buffer and create+upload a fresh GPU buffer for each draw call. The IGPU
+/// backend is responsible for efficient buffer pooling/recycling.
+///
 /// In short, this is what we do:
-/// - We create a buffer of a fixed size (8MB, for example), with the StreamDraw usage
-/// - Each time we want to make a DrawArrays call, we call glMapBufferRange with the 
-///   GL_MAP_UNSYNCHRONIZED_BIT. This tells OpenGL not to do any synchronization _at all_.
-///   We're telling OpenGL: "Please give me write access to a region of this buffer immediately.
-///   I promise not to overwrite any of the areas you might still be reading / executing."
-/// - We maintain a 'cursor' into this buffer, initially at 0. Each time we write, we advance
-///   the cursor by the size of data written (rounding up to 64, which is the minimum size GL
-///   needs to maintain UNSYNCHRONIZED access). 
-/// - If the fresh data we need to write is too big to fit into the remaining space (8MB - cursor),
-///   we simply 'orphan' this buffer (by calling BufferData with the same size, and passing NULL).
-///   This tells OpenGL: allocate a fresh 8MB for me to write in, while you can continue reading from
-///   the previous data allocated for this buffer. When we Orphan, we set cursor back to 0 and start
-///   writing from the start of this fresh new buffer we got. 
-/// - Eventually, there will be a few 8MB buffers 'in flight' with data we've written but which
-///   OpenGL is still rendering. Since all the buffers are exactly the same size, it makes it very
-///   easy for the driver to optimize it's heap management and we are usually going to get to a 
-///   steady state soon where there are N 8MB buffers continuously being rotated between the CPU
-///   and the GPU. 
-/// In practice, this is really efficient and we are getting frame rates (even with a very large
-/// number of small draw primitives) that are well beyond what even the Flux rendering engine can
-/// manage. 
-/// Note: The ShaderWrap classes add another level of optimization on top of this StreamBuffer. 
+/// - We maintain a CPU-side staging byte array
+/// - Each time we want to draw, we copy vertex data into the staging buffer
+/// - We create a transient GPU buffer, upload the data, bind it, and issue the draw
+/// - The transient buffer is deleted immediately after use (the backend may defer
+///   the actual deletion until the GPU is done with it)
 class StreamBuffer {
    // Constructors -------------------------------------------------------------
-   /// <summary>Construct a StreamBuffer (this generates the buffer and assigns 8MB of storage for it)</summary>
-   public StreamBuffer () {
-      mId = GL.GenBuffer ();
-      GL.BindBuffer (EBufferTarget.Array, mId);
-      GL.BufferData (EBufferTarget.Array, mSize = 8192 * 1024, 0, EBufferUsage.StreamDraw);
-   }
+   /// <summary>Construct a StreamBuffer</summary>
+   public StreamBuffer () { }
 
+   /// <summary>The singleton StreamBuffer instance</summary>
    public static StreamBuffer It => mIt ??= new ();
    static StreamBuffer? mIt;
 
    // Methods ------------------------------------------------------------------
-   /// <summary>Copy data into the buffer from the given pointer, and issue a DrawArrays call</summary>
-   /// <param name="shader">The shader we're currently using (we use this to get the mode)</param>
+   /// <summary>Copy data into a staging buffer and issue a Draw call via IGPU</summary>
    /// <param name="pSrc">The source buffer from where the 'vertex definitions' are picked</param>
    /// <param name="nVerts">The number of 'vertices'</param>
-   /// <param name="attribs">The set of Attrib values (like Vec4f, int, Vec2s etc)</param>
-   internal unsafe void Draw (ShaderImp shader, void* pSrc, int nVerts, Attrib[] attribs) {
-      GLState.VAO = HVertexArray.Zero;
-      GL.BindBuffer (EBufferTarget.Array, mId);
-      int cbVertex = attribs.Sum (a => a.Size);
-      int cbData = cbVertex * nVerts, cbReserve = cbData.RoundUp (64);
-      if (cbReserve > mSize) throw new Exception ($"StreamBuffer size of {mSize} bytes inadequate.");
-      if (mCursor + cbReserve > mSize) Orphan ();
-      Ptr pDst = GL.MapBufferRange (EBufferTarget.Array, mCursor, cbReserve, EMapAccess.Unsynchronized | EMapAccess.Write);
-      Buffer.MemoryCopy (pSrc, pDst.ToPointer (), cbData, cbData);
-      GL.UnmapBuffer (EBufferTarget.Array);
+   /// <param name="cbVertex">The size of each vertex, in bytes</param>
+   internal unsafe void Draw (void* pSrc, int nVerts, int cbVertex) {
+      IGPU gpu = RenderState.It.GPU;
+      int cbData = cbVertex * nVerts;
 
-      // If the set of attributes has changed, then we set up the attribute array again
-      int index = 0, basis = mCursor;
-      foreach (var a in attribs) {
-         if (a.Integral) GL.VertexAttribIPointer (index, a.Dims, a.Type, cbVertex, basis);
-         else GL.VertexAttribPointer (index, a.Dims, a.Type, false, cbVertex, basis);
-         GL.EnableVertexAttribArray (index);
-         index++; basis += a.Size;
-      }
+      // Create a transient GPU vertex buffer and upload the data
+      int hBuffer = gpu.CreateBuffer (cbData, false);
+      gpu.UploadBuffer (hBuffer, (Ptr)pSrc, cbData);
 
-      mCursor += cbReserve;
-      GL.DrawArrays (shader.Mode, 0, nVerts);
-      for (int i = 0; i < index; i++) GL.DisableVertexAttribArray (index);
-      GL.BindBuffer (EBufferTarget.Array, HBuffer.Zero);
+      // Bind and draw
+      gpu.SetVertexBuffer (hBuffer, 0);
+      gpu.Draw (nVerts, 0);
+
+      // Release the transient buffer (the backend may defer actual deletion)
+      gpu.DeleteBuffer (hBuffer);
    }
-
-   // Implementation -----------------------------------------------------------
-   // This is called when the buffer is full - Calling GL.BufferData with a null Ptr value
-   // tells GL that we are done with this buffer and to submit it to rendering. This also
-   // allocates a fresh 8MB buffer for us to start filling, and sets the cursor back to 0.
-   void Orphan () {
-      mCursor = 0;
-      GL.BufferData (EBufferTarget.Array, mSize, 0, EBufferUsage.StreamDraw);
-   }
-
-   readonly HBuffer mId;      // The buffer we're using
-   readonly int mSize;        // Size of that buffer
-   int mCursor;               // Current write-cursor position in that buffer
 }
 #endregion

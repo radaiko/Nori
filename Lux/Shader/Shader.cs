@@ -238,7 +238,7 @@ abstract class Shader<TVertex, TUniform> : Shader, IComparer<TUniform> where TVe
          }
       }
       fixed (void* pSorted = &mSorted[0])
-         StreamBuffer.It.Draw (Pgm, pSorted, nSortedUsed / cbStruct, Attribs);
+         StreamBuffer.It.Draw (pSorted, nSortedUsed / cbStruct, cbStruct);
    }
    byte[]? mSorted;
 
