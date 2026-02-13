@@ -6,7 +6,7 @@ namespace Nori;
 
 #region class DemoRegistry -------------------------------------------------------------------------
 /// <summary>Central registry of all available demo scenes</summary>
-static class DemoRegistry {
+public static class DemoRegistry {
    /// <summary>All registered demo scenes with display names and factory functions</summary>
    public static readonly (string Name, Func<Scene> Factory)[] Scenes = [
       ("Polygon Fill", () => new LeafDemoScene ()),

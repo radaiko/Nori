@@ -5,6 +5,8 @@
     <Project Path="Demos/ConShell/ConShell.csproj" />
     <Project Path="Demos/BenchShell/BenchShell.csproj" />
     <Project Path="Demos/WPFShell/WPFShell.csproj" />
+    <Project Path="Demos/macOS/Demos.macOS.csproj" />
+    <Project Path="Demos/Web/Demos.Web.csproj" />
   </Folder>
   <Folder Name="/Test/">
     <Project Path="Test/Nori.Test.csproj" />

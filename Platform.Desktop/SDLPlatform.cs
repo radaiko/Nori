@@ -7,7 +7,7 @@ namespace Nori;
 
 #region class SDLPlatform --------------------------------------------------------------------------
 /// <summary>SDL2 cross-platform implementation of IPlatform for macOS and Linux desktops</summary>
-unsafe class SDLPlatform : IPlatform, IDisposable {
+public unsafe class SDLPlatform : IPlatform, IDisposable {
    // Constructors -------------------------------------------------------------
    /// <summary>Initialize SDL2 and create the platform services</summary>
    public SDLPlatform () {
