@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+   <PropertyGroup>
+      <TargetFramework>net10.0-ios</TargetFramework>
+      <Nullable>enable</Nullable>
+      <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+      <OutDir>..\Bin</OutDir>
+      <AssemblyName>Nori.Platform.iOS</AssemblyName>
+      <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
+   </PropertyGroup>
+   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+      <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+   </PropertyGroup>
+   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+      <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+   </PropertyGroup>
+   <ItemGroup>
+      <ProjectReference Include="..\Core\Nori.Core.csproj" />
+      <ProjectReference Include="..\Platform\Nori.Platform.csproj" />
+   </ItemGroup>
+</Project>
