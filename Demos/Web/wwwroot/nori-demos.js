@@ -3,16 +3,6 @@
 // ║║║║╬║╔╣║ JS helper module for demo sidebar and settings panel DOM manipulation
 // ╚╩═╩═╩╝╚╝ ───────────────────────────────────────────────────────────────────────────────────────
 
-// Tracks registered callback functions by ID, invoked from DOM event handlers
-const callbacks = new Map ();
-let nextCallbackId = 1;
-
-function registerCallback (fn) {
-   const id = nextCallbackId++;
-   callbacks.set (id, fn);
-   return id;
-}
-
 // Reference to .NET exports, resolved lazily
 let dotnetExports = null;
 

@@ -41,6 +41,7 @@ public class HtmlSettingsPanel : ISettingsPanel {
       sSliderCallbacks.Clear ();
       sButtonCallbacks.Clear ();
       sListBoxCallbacks.Clear ();
+      sNextId = 1;
       NoriWebDemos.ClearSettings ();
    }
 

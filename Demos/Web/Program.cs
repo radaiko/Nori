@@ -18,6 +18,8 @@ await JSHost.ImportAsync ("nori-platform",
    "../_content/Nori.Platform.Web/nori-platform.js");
 await JSHost.ImportAsync ("nori-demos",
    "../wwwroot/nori-demos.js");
+await JSHost.ImportAsync ("nori",
+   "../_content/Nori.GPU.Web/nori-gpu.js");
 
 // Initialize the Nori core library
 Lib.Init ();
