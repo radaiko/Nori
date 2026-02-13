@@ -74,6 +74,21 @@ class RenderState {
    ShaderImp? mProgram;
    internal int mPgmChanges;
 
+   /// <summary>The current vertex buffer binding (replaces OpenGL VAO concept)</summary>
+   /// WebGPU does not have VAOs. This tracked int allows callers to detect
+   /// redundant bindings during the transition. Callers will migrate to
+   /// IGPU.SetVertexBuffer in Task 2.3.
+   public int VertexBinding {
+      get => mVertexBinding;
+      set {
+         if (mVertexBinding == value) return;
+         mVertexBinding = value;
+         if (value != 0) mBindChanges++;
+      }
+   }
+   int mVertexBinding;
+   internal int mBindChanges;
+
    /// <summary>The current typeface being used for text rendering</summary>
    public TypeFace? TypeFace {
       set {
@@ -94,7 +109,8 @@ class RenderState {
       mStencilBehavior = EStencilBehavior.None;
       mPolygonOffsetFill = false;
       mProgram = null;
-      mPgmChanges = 0;
+      mPgmChanges = 0; mBindChanges = 0;
+      mVertexBinding = 0;
       mTypeFaceId = 0;
       mGPU.Clear (bgrdColor);
    }
@@ -159,6 +175,12 @@ static class GLState {
    /// <summary>The current typeface</summary>
    public static TypeFace? TypeFace { set => RenderState.It.TypeFace = value; }
 
+   /// <summary>Vertex binding tracker (replaces OpenGL VAO)</summary>
+   public static int VAO {
+      get => RenderState.It.VertexBinding;
+      set => RenderState.It.VertexBinding = value;
+   }
+
    // Methods ------------------------------------------------------------------
    /// <summary>Reset state at the start of every frame</summary>
    public static void StartFrame (Vec2S size, Color4 bgrdColor)
@@ -166,5 +188,8 @@ static class GLState {
 
    /// <summary>Number of pipeline changes this frame</summary>
    internal static int mPgmChanges => RenderState.It.mPgmChanges;
+
+   /// <summary>Number of vertex binding changes this frame</summary>
+   internal static int mVAOChanges => RenderState.It.mBindChanges;
 }
 #endregion
