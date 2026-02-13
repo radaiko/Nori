@@ -278,7 +278,7 @@ abstract class Shader<TVertex, TUniform> : Shader, IComparer<TUniform> where TVe
 
    public override int OrderUniforms (int id1, int id2) {
       if (id1 == id2) return 0;
-      Span<TUniform> span = mUniforms.AsSpan ();
+      Span<TUniform> span = CollectionsMarshal.AsSpan (mUniforms);
       ref readonly TUniform ub1 = ref span[id1], ub2 = ref span[id2];
       return OrderUniformsImp (in ub1, in ub2);
    }
@@ -288,7 +288,7 @@ abstract class Shader<TVertex, TUniform> : Shader, IComparer<TUniform> where TVe
    protected abstract void ApplyUniformsImp (ref readonly TUniform settings);
 
    public override void ApplyUniforms (int nUniform) {
-      Span<TUniform> span = mUniforms.AsSpan ();
+      Span<TUniform> span = CollectionsMarshal.AsSpan (mUniforms);
       ref readonly TUniform ub = ref span[nUniform];
       ApplyUniformsImp (in ub);
       mApplyUniforms++;

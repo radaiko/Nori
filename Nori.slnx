@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/Demos/">
+    <Project Path="Demos/Shared/Demos.Shared.csproj" />
     <Project Path="Demos/WPFDemo/WPFDemo.csproj" />
     <Project Path="Demos/ConShell/ConShell.csproj" />
     <Project Path="Demos/BenchShell/BenchShell.csproj" />

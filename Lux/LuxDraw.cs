@@ -11,6 +11,9 @@ public enum ELuxAttr {
    Xfm = 1 << 4, PointSize = 1 << 5, TypeFace = 1 << 6, ZLevel = 1 << 7
 }
 
+/// <summary>Various shading modes to pass to Lux.Mesh(...)</summary>
+public enum EShadeMode { Flat, Gourad, Phong, PhongNoStencil, Glass, GlassNoStencil }
+
 #region class Lux ----------------------------------------------------------------------------------
 /// <summary>The public interface to the Lux renderer</summary>
 public static partial class Lux {
