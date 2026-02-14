@@ -1,4 +1,12 @@
 <Solution>
+  <Folder Name="/Platform/">
+    <Project Path="Platform.Windows/Nori.Platform.Windows.csproj" />
+    <Project Path="Platform.Desktop/Nori.Platform.Desktop.csproj" />
+    <Project Path="Platform.Web/Nori.Platform.Web.csproj" />
+    <Project Path="Platform.iOS/Nori.Platform.iOS.csproj" />
+    <Project Path="Platform.Android/Nori.Platform.Android.csproj" />
+    <Project Path="GPU.Web/Nori.GPU.Web.csproj" />
+  </Folder>
   <Folder Name="/Demos/">
     <Project Path="Demos/Shared/Demos.Shared.csproj" />
     <Project Path="Demos/ConShell/ConShell.csproj" />

@@ -9,6 +9,7 @@
     <OutDir>..\..\Bin</OutDir>
     <Optimize>false</Optimize>
     <PlatformTarget>x64</PlatformTarget>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
 
 </Project>
