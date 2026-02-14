@@ -7,7 +7,7 @@ namespace Nori.Testing;
 [Fixture (32, "RBR robot basic tests", "Sim")]
 class TRBRSolver {
    TRBRSolver () {
-      mMech = Mechanism.Load ("N:/Wad/FanucX/mechanism.curl");
+      mMech = Mechanism.Load ($"{Lib.DevRoot}/Wad/FanucX/mechanism.curl");
       mTip = mMech.FindChild ("Tip")!;
       mJoints = [.. "SLURBT".Select (a => mMech.FindChild (a.ToString ())!)];
       for (int i = 0; i < 6; i++) {

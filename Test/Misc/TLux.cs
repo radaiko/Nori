@@ -98,6 +98,10 @@ class TLux {
       Assert.PNGFilesEqual ($"{NT.Data}/Lux/{file}", NT.TmpPNG);
    }
 
-   TypeFace mFace = new (Lib.ReadBytes ("nori:GL/Fonts/Roboto-Regular.ttf"), 28);
-   TypeFace mFace2 = new (Lib.ReadBytes ("nori:GL/Fonts/Roboto-Regular.ttf"), 18);
+   // Lazy init to prevent FreeType DllNotFoundException from crashing the entire test runner
+   // on platforms where the native library is not available
+   TypeFace mFace => _face ??= new (Lib.ReadBytes ("nori:GL/Fonts/Roboto-Regular.ttf"), 28);
+   TypeFace? _face;
+   TypeFace mFace2 => _face2 ??= new (Lib.ReadBytes ("nori:GL/Fonts/Roboto-Regular.ttf"), 18);
+   TypeFace? _face2;
 }

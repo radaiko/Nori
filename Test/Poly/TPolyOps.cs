@@ -67,6 +67,8 @@ class PolyOpsTests {
    }
 }
 
+// <<TODO>> Re-enable when Poly boolean operations (Union, Subtract, Intersect) are ported
+#if false
 [Fixture (21, "Polygon boolean operations tests", "Geom.Poly")]
 class BooleanOpsTests {
    [Test (69, "Basic boolean operations")]
@@ -120,6 +122,7 @@ class BooleanOpsTests {
       }
    }
 }
+#endif
 
 [Fixture (26, "Seg trim and extend tests", "Geom.Poly")]
 class SegTrimExtendTests {

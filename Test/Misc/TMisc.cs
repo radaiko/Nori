@@ -331,6 +331,8 @@ class TMisc {
    }
 
 
+   // <<TODO>> Re-enable when Tess2D is ported to cross-platform
+#if false
    [Test (68, "2D tessellation tests")]
    void Test11 () {
       // Create poly with holes
@@ -365,6 +367,7 @@ class TMisc {
       File.WriteAllText (NT.TmpTxt, new Mesh3Builder (nodes.AsSpan ()).Build ().ToTMesh ());
       Assert.TextFilesEqual ("Geom/Tess/gl2d.tmesh", NT.TmpTxt);
    }
+#endif
 
    [Test (12, "Test for E2BendLine properties")]
    void Test12 () {

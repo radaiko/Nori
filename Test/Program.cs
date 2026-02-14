@@ -8,7 +8,6 @@ namespace Nori.Testing;
 /// <summary>Entry point of the Nori.Test application</summary>
 class Program {
    // Entry point into Nori.Test.exe
-   [STAThread]
    public static void Main (string[] args)
       => new Program (args).Run ();
 
@@ -16,7 +15,6 @@ class Program {
    // The constructor gathers all the tests, and also parses the command line arguments
    Program (string[] args) {
       Lib.Init ();
-      Lux.CreatePanel (true);
       foreach (var arg in args) {
          if (int.TryParse (arg, out int n)) {
             if (n >= 0) mTestID.Add (n);
