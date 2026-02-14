@@ -1,10 +1,8 @@
 <Solution>
   <Folder Name="/Demos/">
     <Project Path="Demos/Shared/Demos.Shared.csproj" />
-    <Project Path="Demos/WPFDemo/WPFDemo.csproj" />
     <Project Path="Demos/ConShell/ConShell.csproj" />
     <Project Path="Demos/BenchShell/BenchShell.csproj" />
-    <Project Path="Demos/WPFShell/WPFShell.csproj" />
     <Project Path="Demos/macOS/Demos.macOS.csproj" />
     <Project Path="Demos/Linux/Demos.Linux.csproj" />
     <Project Path="Demos/Web/Demos.Web.csproj" />
@@ -23,5 +21,4 @@
   <Project Path="Platform/Nori.Platform.csproj" />
   <Project Path="GPU/Nori.GPU.csproj" />
   <Project Path="Lux/Nori.Lux.csproj" />
-  <Project Path="WGL/Nori.WGL.csproj" />
 </Solution>

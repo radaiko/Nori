@@ -12,7 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Core\Nori.Core.csproj" />
     <ProjectReference Include="..\Lux\Nori.Lux.csproj" />
-    <ProjectReference Include="..\WGL\Nori.WGL.csproj" />
+    <ProjectReference Include="..\GPU\Nori.GPU.csproj" />
   </ItemGroup>
 
 </Project>

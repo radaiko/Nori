@@ -28,10 +28,10 @@ Here are the primary projects in the **Nori.sln**:
 
 - **Nori.Core**: The core library for Nori, containing the Nori code (universal
   library, should work on Windows, Mac, Linux).
-- **Nori.Gen**: Source generator used by Nori.Core, Nori.WGL to simplify 
-  implementation of some patterns (like the Singleton pattern). 
-- **Nori.WGL**: The *Lux* rendering engine, built on top of OpenGL (works only
-  on Windows).
+- **Nori.Gen**: Source generator used by Nori.Core to simplify
+  implementation of some patterns (like the Singleton pattern).
+- **Nori.Platform**: Platform abstraction layer for windowing and input.
+- **Nori.GPU**: Cross-platform GPU abstraction layer (IGPU interface).
 - **Nori.Test**: Test suite for Nori.
 - **Nori.Con**: Console utility for developers (not needed at Nori runtime). 
 - **Nori.Doc**: Code documentation tool for Nori (generates HTML documentation 
