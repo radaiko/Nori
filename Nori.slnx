@@ -7,6 +7,8 @@
     <Project Path="Demos/Linux/Demos.Linux.csproj" />
     <Project Path="Demos/Web/Demos.Web.csproj" />
     <Project Path="Demos/Windows/Demos.Windows.csproj" />
+    <Project Path="Demos/iOS/Demos.iOS.csproj" />
+    <Project Path="Demos/Android/Demos.Android.csproj" />
   </Folder>
   <Folder Name="/Test/">
     <Project Path="Test/Nori.Test.csproj" />

@@ -6,7 +6,7 @@ namespace Nori;
 
 #region class iOSPlatform -----------------------------------------------------------------------------
 /// <summary>iOS implementation of IPlatform using UIKit and CADisplayLink for the render loop</summary>
-class iOSPlatform : IPlatform {
+public class iOSPlatform : IPlatform {
    // Properties ---------------------------------------------------------------
    /// <summary>Hardware input abstraction (touch events mapped to mouse events)</summary>
    public IInput Input => mInput;
@@ -49,7 +49,7 @@ class iOSPlatform : IPlatform {
    }
 
    /// <summary>The view controller hosting the surface and input views</summary>
-   internal UIViewController? ViewController => mViewController;
+   public UIViewController? ViewController => mViewController;
 
    // Implementation -----------------------------------------------------------
    // Called by CADisplayLink on each screen refresh
