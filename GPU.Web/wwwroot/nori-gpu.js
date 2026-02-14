@@ -414,7 +414,7 @@ struct VertexOutput {
 };
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
-    let tnorm = normalize((uniforms.normal_xfm * vec4<f32>(input.normal, 1.0)).xyz);
+    let tnorm = normalize((uniforms.normal_xfm * vec4<f32>(input.normal, 0.0)).xyz);
     let dotp = abs(dot(LIGHT_POS, tnorm));
     let amb_diffuse = uniforms.draw_color * 0.9 * dotp + AMBIENT_COLOR;
     let specular = SPECULAR_COLOR * pow(abs(dot(tnorm, vec3<f32>(0.0, 0.0, 1.0))), SPECULAR_EXP);
@@ -452,7 +452,7 @@ struct VertexOutput {
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
     var out: VertexOutput;
-    out.normal = normalize((uniforms.normal_xfm * vec4<f32>(input.normal, 1.0)).xyz);
+    out.normal = normalize((uniforms.normal_xfm * vec4<f32>(input.normal, 0.0)).xyz);
     out.position = uniforms.xfm * vec4<f32>(input.position, 1.0);
     return out;
 }
@@ -496,7 +496,7 @@ struct FragInput {
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
     var out: VertexOutput;
-    out.normal = normalize((uniforms.normal_xfm * vec4<f32>(input.normal, 1.0)).xyz);
+    out.normal = normalize((uniforms.normal_xfm * vec4<f32>(input.normal, 0.0)).xyz);
     out.position = uniforms.xfm * vec4<f32>(input.position, 1.0);
     return out;
 }
@@ -557,7 +557,7 @@ struct VertexOutput {
 };
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
-    let tnorm = normalize((uniforms.normal_xfm * vec4<f32>(input.normal, 1.0)).xyz);
+    let tnorm = normalize((uniforms.normal_xfm * vec4<f32>(input.normal, 0.0)).xyz);
     let dotp = abs(dot(LIGHT_POS, tnorm));
     let amb_diffuse = uniforms.draw_color * 0.9 * dotp + AMBIENT_COLOR;
     let specular = SPECULAR_COLOR * pow(abs(dot(tnorm, vec3<f32>(0.0, 0.0, 1.0))), SPECULAR_EXP);
@@ -598,7 +598,7 @@ struct VertexOutput {
 };
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
-    let tnorm = normalize((uniforms.normal_xfm * vec4<f32>(input.normal, 1.0)).xyz);
+    let tnorm = normalize((uniforms.normal_xfm * vec4<f32>(input.normal, 0.0)).xyz);
     let dotp = abs(dot(LIGHT_POS, tnorm));
     let amb_diffuse = uniforms.draw_color * 0.9 * dotp + AMBIENT_COLOR;
     let specular = SPECULAR_COLOR * pow(abs(dot(tnorm, vec3<f32>(0.0, 0.0, 1.0))), SPECULAR_EXP);
@@ -1382,6 +1382,7 @@ export const noriGpu = {
          },
          primitive: {
             topology: "triangle-list",
+            cullMode: "none",
          },
       };
 
