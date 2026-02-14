@@ -62,7 +62,7 @@ public abstract class Scene {
       var vp = Lux.Viewport;
       double x = 2.0 * pos.X / vp.X - 1;
       double y = -(2.0 * pos.Y / vp.Y - 1);
-      double z = 2 * depth - 1;
+      double z = depth;
       return new Point3 (x, y, z) * mXfms[0].InvXfm;
    }
 
@@ -227,7 +227,7 @@ class XfmEntry {
    }
 
    // Properties ---------------------------------------------------------------
-   /// <summary>Inverse transform that transforms OpenGL clip spaces to world (inverse of Xfm)</summary>
+   /// <summary>Inverse transform that transforms clip space to world (inverse of Xfm)</summary>
    public Matrix3 InvXfm => mInvXfm ??= (mScene.WorldXfm * mScene.ProjectionXfm).GetInverse ();
    Matrix3? mInvXfm;
 
@@ -250,7 +250,7 @@ class XfmEntry {
    }
    Matrix3? mObjToWorld;
 
-   /// <summary>The overall transform from the world to the OpenGL clip coordinates</summary>
+   /// <summary>The overall transform from the world to clip coordinates</summary>
    public ref Mat4F Xfm { get { _ = ObjToWorld; return ref mXfm; } }
    Mat4F mXfm, mNormalXfm;
 

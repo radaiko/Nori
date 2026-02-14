@@ -129,7 +129,7 @@ public static partial class Lux {
    /// <summary>Converts a pixel coordinate to world coordinates</summary>
    public static Point3 PixelToWorld (Vec2S pix) {
       if (mUIScene == null) return new (pix.X, pix.Y, 0);
-      // Convert pixel coordinate to OpenGL clip space coordinates.
+      // Convert pixel coordinate to clip space coordinates.
       Vec2S vp = mViewport;
       Point3 clip = new (2.0 * pix.X / vp.X - 1, 1.0 - 2.0 * pix.Y / vp.Y, 0);
       clip *= mUIScene.Xfms[0].InvXfm;

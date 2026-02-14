@@ -113,10 +113,10 @@ public class Matrix3 : IEQuable<Matrix3> {
    public static readonly Matrix3 Identity
       = new (1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, EFlag.Zero);
 
-   /// <summary>Construct a matrix to map a given 2-D bound to opengl clip-space</summary>
+   /// <summary>Construct a matrix to map a given 2-D bound to clip-space</summary>
    /// This first adjusts the bound so that it matches the aspect ratio of the given
-   /// viewport. Then, it constructs a matrix to map this bound to the OpenGL clip space,
-   /// which extends from -1 to +1 in every direction.
+   /// viewport. Then, it constructs a matrix to map this bound to clip space,
+   /// which extends from -1 to +1 in X and Y.
    public static Matrix3 Map (Bound2 window, Vec2S viewport) {
       Point2 mid = window.Midpoint;
       double dx = Max (window.Width / 2.0, 1), dy = Max (window.Height / 2.0, 1);
@@ -131,17 +131,18 @@ public class Matrix3 : IEQuable<Matrix3> {
    }
 
    /// <summary>Creates an orthographic projection matrix</summary>
-   /// This maps the world-space cuboid (designated by Bound3) to the OpenGL clip space
-   /// which extends from -1 to +1 in every direction. It is up to the caller to ensure that
-   /// the X and Y aspect of the Bound3 passed in match that of the viewport, else distortion
-   /// will occur in X and Y
+   /// This maps the world-space cuboid (designated by Bound3) to clip space:
+   /// X and Y map to -1..+1, and Z maps to 0..1 (WebGPU convention).
+   /// Larger Z values in the bound map to 0 (near), smaller to 1 (far).
+   /// It is up to the caller to ensure that the X and Y aspect of the Bound3
+   /// passed in match that of the viewport, else distortion will occur in X and Y
    public static Matrix3 Orthographic (Bound3 bound) {
       double dx = 1 / bound.X.Length, dy = 1 / bound.Y.Length, dz = 1 / bound.Z.Length;
       Point3 mid = bound.Midpoint;
       return new (2 * dx,          0,               0,
                   0,               2 * dy,          0,
-                  0,               0,               -2 * dz,
-                  -2 * dx * mid.X, -2 * dy * mid.Y, -2 * dz * mid.Z,
+                  0,               0,               -dz,
+                  -2 * dx * mid.X, -2 * dy * mid.Y, dz * mid.Z + 0.5,
                   EFlag.Translate | EFlag.Scale | EFlag.Mirror);
    }
 

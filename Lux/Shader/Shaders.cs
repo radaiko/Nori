@@ -307,6 +307,24 @@ abstract class StencilLineShader : Shader<Mesh3.Node, StencilLineShader.Settings
    // Constructor --------------------------------------------------------------
    protected StencilLineShader (ShaderImp imp) : base (imp) { }
 
+   // Methods ------------------------------------------------------------------
+   /// <summary>Expands wire index pairs into consecutive node pairs for instanced line rendering</summary>
+   /// The instanced line pipeline expects consecutive pairs of nodes (p0, p1) in the vertex
+   /// buffer, where each pair represents one line segment instance. Wire indices are pairs of
+   /// indices into the node array. We dereference these to produce the flat node pairs needed.
+   public void DrawWires (Mesh3.Node[] nodes, int[] wires) {
+      int nEdges = wires.Length / 2;
+      if (nEdges == 0) return;
+      if (mExpanded.Length < nEdges * 2)
+         mExpanded = new Mesh3.Node[nEdges * 2];
+      for (int i = 0; i < nEdges; i++) {
+         mExpanded[i * 2] = nodes[wires[i * 2]];
+         mExpanded[i * 2 + 1] = nodes[wires[i * 2 + 1]];
+      }
+      Draw (mExpanded.AsSpan (0, nEdges * 2));
+   }
+   static Mesh3.Node[] mExpanded = [];
+
    // Overrides ----------------------------------------------------------------
    protected override unsafe void ApplyUniformsImp (ref readonly Settings a) {
       IGPU gpu = RenderState.It.GPU;

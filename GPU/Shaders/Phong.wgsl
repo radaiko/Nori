@@ -10,10 +10,8 @@ struct Uniforms {
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
-const LIGHT_POS = vec3<f32>(0.0, 0.0, 1.0);
+const LIGHT_DIR = vec3<f32>(0.0, 0.0, 1.0);
 const AMBIENT_COLOR = vec4<f32>(0.1, 0.1, 0.1, 1.0);
-const SPECULAR_COLOR = vec4<f32>(1.0, 1.0, 1.0, 1.0);
-const SPECULAR_EXP: f32 = 64.0;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -36,9 +34,7 @@ fn vs_main(input: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let tnorm = normalize(in.normal);
-    let dotp = abs(dot(LIGHT_POS, tnorm));
-    let amb_diffuse = uniforms.draw_color * 0.9 * dotp + AMBIENT_COLOR;
-    let specular = SPECULAR_COLOR * pow(abs(dot(tnorm, vec3<f32>(0.0, 0.0, 1.0))), SPECULAR_EXP);
-    let light_intensity = amb_diffuse + specular;
+    let diffuse = abs(dot(LIGHT_DIR, tnorm));
+    let light_intensity = uniforms.draw_color * diffuse + AMBIENT_COLOR;
     return vec4<f32>(light_intensity.rgb, uniforms.draw_color.a);
 }

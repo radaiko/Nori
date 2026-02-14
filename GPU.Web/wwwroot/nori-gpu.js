@@ -393,17 +393,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 `;
 
 const SHADER_GOURAD = `
-// Gourad.wgsl — Gouraud shading (per-vertex lighting, color interpolation)
+// Gourad.wgsl — Gouraud shading with Lambert diffuse (per-vertex lighting)
 struct Uniforms {
     xfm: mat4x4<f32>,
     normal_xfm: mat4x4<f32>,
     draw_color: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
-const LIGHT_POS = vec3<f32>(0.0, 0.0, 1.0);
+const LIGHT_DIR = vec3<f32>(0.0, 0.0, 1.0);
 const AMBIENT_COLOR = vec4<f32>(0.1, 0.1, 0.1, 1.0);
-const SPECULAR_COLOR = vec4<f32>(1.0, 1.0, 1.0, 1.0);
-const SPECULAR_EXP: f32 = 100.0;
 struct VertexInput {
     @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
@@ -415,11 +413,9 @@ struct VertexOutput {
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
     let tnorm = normalize((uniforms.normal_xfm * vec4<f32>(input.normal, 0.0)).xyz);
-    let dotp = abs(dot(LIGHT_POS, tnorm));
-    let amb_diffuse = uniforms.draw_color * 0.9 * dotp + AMBIENT_COLOR;
-    let specular = SPECULAR_COLOR * pow(abs(dot(tnorm, vec3<f32>(0.0, 0.0, 1.0))), SPECULAR_EXP);
+    let diffuse = abs(dot(LIGHT_DIR, tnorm));
     var out: VertexOutput;
-    out.light_intensity = amb_diffuse + specular;
+    out.light_intensity = uniforms.draw_color * diffuse + AMBIENT_COLOR;
     out.position = uniforms.xfm * vec4<f32>(input.position, 1.0);
     return out;
 }
@@ -430,17 +426,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 `;
 
 const SHADER_PHONG = `
-// Phong.wgsl — Phong shading (per-fragment lighting, normal interpolation)
+// Phong.wgsl — Lambert diffuse shading (per-fragment lighting, normal interpolation)
 struct Uniforms {
     xfm: mat4x4<f32>,
     normal_xfm: mat4x4<f32>,
     draw_color: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
-const LIGHT_POS = vec3<f32>(0.0, 0.0, 1.0);
+const LIGHT_DIR = vec3<f32>(0.0, 0.0, 1.0);
 const AMBIENT_COLOR = vec4<f32>(0.1, 0.1, 0.1, 1.0);
-const SPECULAR_COLOR = vec4<f32>(1.0, 1.0, 1.0, 1.0);
-const SPECULAR_EXP: f32 = 64.0;
 struct VertexInput {
     @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
@@ -459,26 +453,22 @@ fn vs_main(input: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let tnorm = normalize(in.normal);
-    let dotp = abs(dot(LIGHT_POS, tnorm));
-    let amb_diffuse = uniforms.draw_color * 0.9 * dotp + AMBIENT_COLOR;
-    let specular = SPECULAR_COLOR * pow(abs(dot(tnorm, vec3<f32>(0.0, 0.0, 1.0))), SPECULAR_EXP);
-    let light_intensity = amb_diffuse + specular;
+    let diffuse = abs(dot(LIGHT_DIR, tnorm));
+    let light_intensity = uniforms.draw_color * diffuse + AMBIENT_COLOR;
     return vec4<f32>(light_intensity.rgb, uniforms.draw_color.a);
 }
 `;
 
 const SHADER_PHONGPINK = `
-// PhongPink.wgsl — Phong shading with back-face coloring in pink (debugging)
+// PhongPink.wgsl — Lambert diffuse with back-face coloring in pink (debugging)
 struct Uniforms {
     xfm: mat4x4<f32>,
     normal_xfm: mat4x4<f32>,
     draw_color: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
-const LIGHT_POS = vec3<f32>(0.0, 0.0, 1.0);
+const LIGHT_DIR = vec3<f32>(0.0, 0.0, 1.0);
 const AMBIENT_COLOR = vec4<f32>(0.1, 0.1, 0.1, 1.0);
-const SPECULAR_COLOR = vec4<f32>(1.0, 1.0, 1.0, 1.0);
-const SPECULAR_EXP: f32 = 64.0;
 const PINK = vec4<f32>(1.0, 0.0, 1.0, 1.0);
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -503,11 +493,9 @@ fn vs_main(input: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(in: FragInput) -> @location(0) vec4<f32> {
     let tnorm = normalize(in.normal);
-    let dotp = abs(dot(LIGHT_POS, tnorm));
+    let diffuse = abs(dot(LIGHT_DIR, tnorm));
     let color = select(PINK, uniforms.draw_color, in.front_facing);
-    let amb_diffuse = color * 0.9 * dotp + AMBIENT_COLOR;
-    let specular = SPECULAR_COLOR * pow(abs(dot(tnorm, vec3<f32>(0.0, 0.0, 1.0))), SPECULAR_EXP);
-    let light_intensity = amb_diffuse + specular;
+    let light_intensity = color * diffuse + AMBIENT_COLOR;
     return vec4<f32>(light_intensity.rgb, uniforms.draw_color.a);
 }
 `;
@@ -536,17 +524,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> { return uniforms.draw_co
 `;
 
 const SHADER_GLASS = `
-// Glass.wgsl — Gouraud shading with checkerboard stipple (translucency)
+// Glass.wgsl — Lambert diffuse with checkerboard stipple (translucency)
 struct Uniforms {
     xfm: mat4x4<f32>,
     normal_xfm: mat4x4<f32>,
     draw_color: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
-const LIGHT_POS = vec3<f32>(0.0, 0.0, 1.0);
+const LIGHT_DIR = vec3<f32>(0.0, 0.0, 1.0);
 const AMBIENT_COLOR = vec4<f32>(0.1, 0.1, 0.1, 1.0);
-const SPECULAR_COLOR = vec4<f32>(1.0, 1.0, 1.0, 1.0);
-const SPECULAR_EXP: f32 = 100.0;
 struct VertexInput {
     @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
@@ -558,11 +544,9 @@ struct VertexOutput {
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
     let tnorm = normalize((uniforms.normal_xfm * vec4<f32>(input.normal, 0.0)).xyz);
-    let dotp = abs(dot(LIGHT_POS, tnorm));
-    let amb_diffuse = uniforms.draw_color * 0.9 * dotp + AMBIENT_COLOR;
-    let specular = SPECULAR_COLOR * pow(abs(dot(tnorm, vec3<f32>(0.0, 0.0, 1.0))), SPECULAR_EXP);
+    let diffuse = abs(dot(LIGHT_DIR, tnorm));
     var out: VertexOutput;
-    out.light_intensity = amb_diffuse + specular;
+    out.light_intensity = uniforms.draw_color * diffuse + AMBIENT_COLOR;
     out.position = uniforms.xfm * vec4<f32>(input.position, 1.0);
     return out;
 }
@@ -577,17 +561,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 `;
 
 const SHADER_FLATFACET = `
-// FlatFacet.wgsl — Flat-faceted shading (per-face lighting, no interpolation)
+// FlatFacet.wgsl — Flat-faceted Lambert shading (per-face lighting, no interpolation)
 struct Uniforms {
     xfm: mat4x4<f32>,
     normal_xfm: mat4x4<f32>,
     draw_color: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
-const LIGHT_POS = vec3<f32>(0.0, 0.0, 1.0);
+const LIGHT_DIR = vec3<f32>(0.0, 0.0, 1.0);
 const AMBIENT_COLOR = vec4<f32>(0.1, 0.1, 0.1, 1.0);
-const SPECULAR_COLOR = vec4<f32>(1.0, 1.0, 1.0, 1.0);
-const SPECULAR_EXP: f32 = 100.0;
 struct VertexInput {
     @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
@@ -599,11 +581,9 @@ struct VertexOutput {
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
     let tnorm = normalize((uniforms.normal_xfm * vec4<f32>(input.normal, 0.0)).xyz);
-    let dotp = abs(dot(LIGHT_POS, tnorm));
-    let amb_diffuse = uniforms.draw_color * 0.9 * dotp + AMBIENT_COLOR;
-    let specular = SPECULAR_COLOR * pow(abs(dot(tnorm, vec3<f32>(0.0, 0.0, 1.0))), SPECULAR_EXP);
+    let diffuse = abs(dot(LIGHT_DIR, tnorm));
     var out: VertexOutput;
-    out.light_intensity = amb_diffuse + specular;
+    out.light_intensity = uniforms.draw_color * diffuse + AMBIENT_COLOR;
     out.position = uniforms.xfm * vec4<f32>(input.position, 1.0);
     return out;
 }
