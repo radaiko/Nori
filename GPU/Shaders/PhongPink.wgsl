@@ -10,7 +10,6 @@ struct Uniforms {
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
-const LIGHT_DIR = vec3<f32>(0.0, 0.0, 1.0);
 const AMBIENT_COLOR = vec4<f32>(0.1, 0.1, 0.1, 1.0);
 const PINK = vec4<f32>(1.0, 0.0, 1.0, 1.0);
 
@@ -34,15 +33,16 @@ struct FragInput {
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
     var out: VertexOutput;
-    out.normal = normalize((uniforms.normal_xfm * vec4<f32>(input.normal, 1.0)).xyz);
+    out.normal = input.normal;
     out.position = uniforms.xfm * vec4<f32>(input.position, 1.0);
     return out;
 }
 
 @fragment
 fn fs_main(in: FragInput) -> @location(0) vec4<f32> {
+    let light_dir = normalize(uniforms.normal_xfm[3].xyz);
     let tnorm = normalize(in.normal);
-    let diffuse = abs(dot(LIGHT_DIR, tnorm));
+    let diffuse = abs(dot(light_dir, tnorm));
     let color = select(PINK, uniforms.draw_color, in.front_facing);
     let light_intensity = color * diffuse + AMBIENT_COLOR;
     return vec4<f32>(light_intensity.rgb, uniforms.draw_color.a);

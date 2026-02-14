@@ -13,7 +13,6 @@ struct Uniforms {
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
-const LIGHT_DIR = vec3<f32>(0.0, 0.0, 1.0);
 const AMBIENT_COLOR = vec4<f32>(0.1, 0.1, 0.1, 1.0);
 
 struct VertexInput {
@@ -28,9 +27,8 @@ struct VertexOutput {
 
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
-    let tnorm = normalize((uniforms.normal_xfm * vec4<f32>(input.normal, 1.0)).xyz);
-
-    let diffuse = abs(dot(LIGHT_DIR, tnorm));
+    let light_dir = normalize(uniforms.normal_xfm[3].xyz);
+    let diffuse = abs(dot(light_dir, normalize(input.normal)));
     var out: VertexOutput;
     out.light_intensity = uniforms.draw_color * diffuse + AMBIENT_COLOR;
     out.position = uniforms.xfm * vec4<f32>(input.position, 1.0);

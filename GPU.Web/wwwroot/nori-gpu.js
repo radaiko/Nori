@@ -400,7 +400,6 @@ struct Uniforms {
     draw_color: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
-const LIGHT_DIR = vec3<f32>(0.0, 0.0, 1.0);
 const AMBIENT_COLOR = vec4<f32>(0.1, 0.1, 0.1, 1.0);
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -412,8 +411,8 @@ struct VertexOutput {
 };
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
-    let tnorm = normalize((uniforms.normal_xfm * vec4<f32>(input.normal, 0.0)).xyz);
-    let diffuse = abs(dot(LIGHT_DIR, tnorm));
+    let light_dir = normalize(uniforms.normal_xfm[3].xyz);
+    let diffuse = abs(dot(light_dir, normalize(input.normal)));
     var out: VertexOutput;
     out.light_intensity = uniforms.draw_color * diffuse + AMBIENT_COLOR;
     out.position = uniforms.xfm * vec4<f32>(input.position, 1.0);
@@ -433,7 +432,6 @@ struct Uniforms {
     draw_color: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
-const LIGHT_DIR = vec3<f32>(0.0, 0.0, 1.0);
 const AMBIENT_COLOR = vec4<f32>(0.1, 0.1, 0.1, 1.0);
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -446,14 +444,15 @@ struct VertexOutput {
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
     var out: VertexOutput;
-    out.normal = normalize((uniforms.normal_xfm * vec4<f32>(input.normal, 0.0)).xyz);
+    out.normal = input.normal;
     out.position = uniforms.xfm * vec4<f32>(input.position, 1.0);
     return out;
 }
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    let light_dir = normalize(uniforms.normal_xfm[3].xyz);
     let tnorm = normalize(in.normal);
-    let diffuse = abs(dot(LIGHT_DIR, tnorm));
+    let diffuse = abs(dot(light_dir, tnorm));
     let light_intensity = uniforms.draw_color * diffuse + AMBIENT_COLOR;
     return vec4<f32>(light_intensity.rgb, uniforms.draw_color.a);
 }
@@ -467,7 +466,6 @@ struct Uniforms {
     draw_color: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
-const LIGHT_DIR = vec3<f32>(0.0, 0.0, 1.0);
 const AMBIENT_COLOR = vec4<f32>(0.1, 0.1, 0.1, 1.0);
 const PINK = vec4<f32>(1.0, 0.0, 1.0, 1.0);
 struct VertexInput {
@@ -486,14 +484,15 @@ struct FragInput {
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
     var out: VertexOutput;
-    out.normal = normalize((uniforms.normal_xfm * vec4<f32>(input.normal, 0.0)).xyz);
+    out.normal = input.normal;
     out.position = uniforms.xfm * vec4<f32>(input.position, 1.0);
     return out;
 }
 @fragment
 fn fs_main(in: FragInput) -> @location(0) vec4<f32> {
+    let light_dir = normalize(uniforms.normal_xfm[3].xyz);
     let tnorm = normalize(in.normal);
-    let diffuse = abs(dot(LIGHT_DIR, tnorm));
+    let diffuse = abs(dot(light_dir, tnorm));
     let color = select(PINK, uniforms.draw_color, in.front_facing);
     let light_intensity = color * diffuse + AMBIENT_COLOR;
     return vec4<f32>(light_intensity.rgb, uniforms.draw_color.a);
@@ -531,7 +530,6 @@ struct Uniforms {
     draw_color: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
-const LIGHT_DIR = vec3<f32>(0.0, 0.0, 1.0);
 const AMBIENT_COLOR = vec4<f32>(0.1, 0.1, 0.1, 1.0);
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -543,8 +541,8 @@ struct VertexOutput {
 };
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
-    let tnorm = normalize((uniforms.normal_xfm * vec4<f32>(input.normal, 0.0)).xyz);
-    let diffuse = abs(dot(LIGHT_DIR, tnorm));
+    let light_dir = normalize(uniforms.normal_xfm[3].xyz);
+    let diffuse = abs(dot(light_dir, normalize(input.normal)));
     var out: VertexOutput;
     out.light_intensity = uniforms.draw_color * diffuse + AMBIENT_COLOR;
     out.position = uniforms.xfm * vec4<f32>(input.position, 1.0);
@@ -568,7 +566,6 @@ struct Uniforms {
     draw_color: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
-const LIGHT_DIR = vec3<f32>(0.0, 0.0, 1.0);
 const AMBIENT_COLOR = vec4<f32>(0.1, 0.1, 0.1, 1.0);
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -580,8 +577,8 @@ struct VertexOutput {
 };
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
-    let tnorm = normalize((uniforms.normal_xfm * vec4<f32>(input.normal, 0.0)).xyz);
-    let diffuse = abs(dot(LIGHT_DIR, tnorm));
+    let light_dir = normalize(uniforms.normal_xfm[3].xyz);
+    let diffuse = abs(dot(light_dir, normalize(input.normal)));
     var out: VertexOutput;
     out.light_intensity = uniforms.draw_color * diffuse + AMBIENT_COLOR;
     out.position = uniforms.xfm * vec4<f32>(input.position, 1.0);

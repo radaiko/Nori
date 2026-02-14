@@ -243,7 +243,16 @@ class XfmEntry {
             if (mParent == null) mObjToWorld = mScene.WorldXfm;
             else mObjToWorld = mIncremental * mParent.ObjToWorld;
             mXfm = (Mat4F)(ObjToWorld * mScene.ProjectionXfm);
-            if (mIs3D) mNormalXfm = (Mat4F)ObjToWorld.ExtractRotation ();
+            if (mIs3D) {
+               // Pack the camera direction (in model space) into the last row of NormalXfm.
+               // Camera forward in view space is (0,0,1). To get it in model space,
+               // we apply the inverse rotation: (0,0,1) * R^T = (R.M13, R.M23, R.M33).
+               // Shaders extract this from normal_xfm[3].xyz for lighting in model space.
+               var r = (Mat4F)ObjToWorld.ExtractRotation ();
+               mNormalXfm = new Mat4F (
+                  r.M11, r.M12, r.M13, r.M21, r.M22, r.M23,
+                  r.M31, r.M32, r.M33, r.M13, r.M23, r.M33);
+            }
          }
          return mObjToWorld;
       }
