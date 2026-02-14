@@ -127,17 +127,17 @@ unsafe class NativeGPU : IGPU, IDisposable {
    }
 
    /// <summary>Draw non-indexed primitives</summary>
-   public void Draw (int vertexCount, int firstVertex) {
+   public void Draw (int vertexCount, int instanceCount, int firstVertex) {
       EnsureRenderPass ();
       mDevice!.Api.RenderPassEncoderDraw (mEncoder!.RenderPass,
-         (uint)vertexCount, 1, (uint)firstVertex, 0);
+         (uint)vertexCount, (uint)instanceCount, (uint)firstVertex, 0);
    }
 
    /// <summary>Draw indexed primitives</summary>
-   public void DrawIndexed (int indexCount, int firstIndex, int baseVertex) {
+   public void DrawIndexed (int indexCount, int instanceCount, int firstIndex, int baseVertex) {
       EnsureRenderPass ();
       mDevice!.Api.RenderPassEncoderDrawIndexed (mEncoder!.RenderPass,
-         (uint)indexCount, 1, (uint)firstIndex, baseVertex, 0);
+         (uint)indexCount, (uint)instanceCount, (uint)firstIndex, baseVertex, 0);
    }
 
    // IGPU: Texture operations -------------------------------------------------

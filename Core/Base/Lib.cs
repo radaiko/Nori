@@ -106,7 +106,7 @@ public static class Lib {
 
       // Helpers ..............................
       static string? GetLocation (Assembly? asm)
-         => asm == null ? null : new Uri (asm.Location).LocalPath;
+         => asm == null || string.IsNullOrEmpty (asm.Location) ? null : new Uri (asm.Location).LocalPath;
    }
    static string? sCodeBase;
 
@@ -114,8 +114,14 @@ public static class Lib {
    public static void Init () {
       if (!sInited) {
          sInited = true;
-         var file = GetLocalFile ("Nori.wad");
-         Register (File.Exists (file) ? new ZipStmLocator ("nori:", file) : new FileStmLocator ("nori:", $"{DevRoot}/Wad/"));
+         if (OperatingSystem.IsBrowser ()) {
+            // In WASM, assets are pre-fetched into the vfs at /data/Wad/ by WebAssetLoader
+            string wad = $"{DevRoot}/Wad/";
+            if (Directory.Exists (wad)) Register (new FileStmLocator ("nori:", wad));
+         } else {
+            string file = GetLocalFile ("Nori.wad");
+            Register (File.Exists (file) ? new ZipStmLocator ("nori:", file) : new FileStmLocator ("nori:", $"{DevRoot}/Wad/"));
+         }
          AddAssembly (Assembly.GetExecutingAssembly ());
          AddNamespace ("Nori"); AddNamespace ("System"); AddNamespace ("System.Collections.Generic");
       }

@@ -69,11 +69,17 @@ class RetainBuffer : IIndexed {
    }
 
    /// <summary>Draws data from the vertex buffer using a simple Draw call (non-indexed)</summary>
-   public void Draw (int offset, int count) {
+   public void Draw (int offset, int count, ShaderImp pgm) {
       PushToGPU ();
       IGPU gpu = RenderState.It.GPU;
-      gpu.SetVertexBuffer (mVertexBuffer, 0);
-      gpu.Draw (count, offset / mcbVertex);
+      if (pgm.VertsPerInstance > 0) {
+         gpu.SetVertexBuffer (mVertexBuffer, offset);
+         int instanceCount = (count * mcbVertex) / pgm.InstanceStride;
+         gpu.Draw (pgm.VertsPerInstance, instanceCount, 0);
+      } else {
+         gpu.SetVertexBuffer (mVertexBuffer, 0);
+         gpu.Draw (count, 1, offset / mcbVertex);
+      }
    }
 
    /// <summary>Draws data from the vertex/index buffers using indexed drawing</summary>
@@ -82,7 +88,7 @@ class RetainBuffer : IIndexed {
       IGPU gpu = RenderState.It.GPU;
       gpu.SetVertexBuffer (mVertexBuffer, 0);
       gpu.SetIndexBuffer (mIndexBuffer, 0);
-      gpu.DrawIndexed (icount, ioffset, offset / mcbVertex);
+      gpu.DrawIndexed (icount, 1, ioffset, offset / mcbVertex);
    }
 
    /// <summary>Gets a currently open RetainBuffer corresponding to a given vertex-spec</summary>
@@ -175,7 +181,8 @@ class StreamBuffer {
    /// <param name="pSrc">The source buffer from where the 'vertex definitions' are picked</param>
    /// <param name="nVerts">The number of 'vertices'</param>
    /// <param name="cbVertex">The size of each vertex, in bytes</param>
-   internal unsafe void Draw (void* pSrc, int nVerts, int cbVertex) {
+   /// <param name="pgm">The shader pipeline metadata (for instancing info)</param>
+   internal unsafe void Draw (void* pSrc, int nVerts, int cbVertex, ShaderImp pgm) {
       IGPU gpu = RenderState.It.GPU;
       int cbData = cbVertex * nVerts;
 
@@ -185,7 +192,11 @@ class StreamBuffer {
 
       // Bind and draw
       gpu.SetVertexBuffer (hBuffer, 0);
-      gpu.Draw (nVerts, 0);
+      if (pgm.VertsPerInstance > 0) {
+         int instanceCount = cbData / pgm.InstanceStride;
+         gpu.Draw (pgm.VertsPerInstance, instanceCount, 0);
+      } else
+         gpu.Draw (nVerts, 1, 0);
 
       // Release the transient buffer (the backend may defer actual deletion)
       gpu.DeleteBuffer (hBuffer);

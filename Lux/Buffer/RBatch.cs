@@ -242,7 +242,7 @@ struct RBatch : IIndexed {
          // is because IssueAll() sees if this batch and the subsequent one(s)
          // all use the same shader, buffer and uniforms and thus can be merged into
          // a larger single draw.
-         buffer.Draw (Offset, count);
+         buffer.Draw (Offset, count, shader.Pgm);
       }
       // Update stats
       mVertsDrawn += count;

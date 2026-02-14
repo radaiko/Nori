@@ -130,18 +130,20 @@ public class WebGPU : IGPU {
    }
 
    /// <summary>Draw non-indexed primitives</summary>
-   public void Draw (int vertexCount, int firstVertex) {
-      EnsureSpace (9);
+   public void Draw (int vertexCount, int instanceCount, int firstVertex) {
+      EnsureSpace (13);
       WriteByte (OP_DRAW);
       WriteInt (vertexCount);
+      WriteInt (instanceCount);
       WriteInt (firstVertex);
    }
 
    /// <summary>Draw indexed primitives</summary>
-   public void DrawIndexed (int indexCount, int firstIndex, int baseVertex) {
-      EnsureSpace (13);
+   public void DrawIndexed (int indexCount, int instanceCount, int firstIndex, int baseVertex) {
+      EnsureSpace (17);
       WriteByte (OP_DRAW_INDEXED);
       WriteInt (indexCount);
+      WriteInt (instanceCount);
       WriteInt (firstIndex);
       WriteInt (baseVertex);
    }
@@ -216,7 +218,7 @@ public class WebGPU : IGPU {
 
    // Initialization -----------------------------------------------------------
    /// <summary>Initialize the WebGPU device and canvas context for the given canvas element</summary>
-   public static void Init (string canvasId) => NoriWebGPU.Init (canvasId);
+   public static Task Init (string canvasId) => NoriWebGPU.Init (canvasId);
 
    // Implementation -----------------------------------------------------------
    // Ensures there are at least 'bytes' bytes of space left in the command

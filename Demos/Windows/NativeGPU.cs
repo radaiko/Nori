@@ -126,17 +126,17 @@ unsafe class NativeGPU : IGPU, IDisposable {
    }
 
    /// <summary>Draw non-indexed primitives</summary>
-   public void Draw (int vertexCount, int firstVertex) {
+   public void Draw (int vertexCount, int instanceCount, int firstVertex) {
       if (mEncoder == null || mEncoder.RenderPass == null) return;
       mDevice.Api.RenderPassEncoderDraw (
-         mEncoder.RenderPass, (uint)vertexCount, 1, (uint)firstVertex, 0);
+         mEncoder.RenderPass, (uint)vertexCount, (uint)instanceCount, (uint)firstVertex, 0);
    }
 
    /// <summary>Draw indexed primitives</summary>
-   public void DrawIndexed (int indexCount, int firstIndex, int baseVertex) {
+   public void DrawIndexed (int indexCount, int instanceCount, int firstIndex, int baseVertex) {
       if (mEncoder == null || mEncoder.RenderPass == null) return;
       mDevice.Api.RenderPassEncoderDrawIndexed (
-         mEncoder.RenderPass, (uint)indexCount, 1, (uint)firstIndex, baseVertex, 0);
+         mEncoder.RenderPass, (uint)indexCount, (uint)instanceCount, (uint)firstIndex, baseVertex, 0);
    }
 
    /// <summary>Create a 2D RGBA texture from pixel data and return its handle</summary>

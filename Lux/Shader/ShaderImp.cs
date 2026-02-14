@@ -14,9 +14,9 @@ namespace Nori;
 class ShaderImp {
    // Constructor --------------------------------------------------------------
    /// <summary>Construct a ShaderImp with the given metadata</summary>
-   ShaderImp (string name, int sort, EPipeline pipeline, EVertexSpec vspec, bool blend, bool depthTest, bool polyOffset, EStencilBehavior stencil)
-      => (Name, SortCode, Pipeline, VSpec, Blending, DepthTest, PolygonOffset, StencilBehavior)
-         = (name, sort, pipeline, vspec, blend, depthTest, polyOffset, stencil);
+   ShaderImp (string name, int sort, EPipeline pipeline, EVertexSpec vspec, bool blend, bool depthTest, bool polyOffset, EStencilBehavior stencil, int vertsPerInstance, int instanceStride)
+      => (Name, SortCode, Pipeline, VSpec, Blending, DepthTest, PolygonOffset, StencilBehavior, VertsPerInstance, InstanceStride)
+         = (name, sort, pipeline, vspec, blend, depthTest, polyOffset, stencil, vertsPerInstance, instanceStride);
 
    // Properties ---------------------------------------------------------------
    /// <summary>Enable blending when this pipeline is used</summary>
@@ -35,6 +35,10 @@ class ShaderImp {
    public readonly EStencilBehavior StencilBehavior;
    /// <summary>The vertex-specification for this shader</summary>
    public readonly EVertexSpec VSpec;
+   /// <summary>Vertices per instance (6 for instanced quads, 0 for direct)</summary>
+   public readonly int VertsPerInstance;
+   /// <summary>Bytes per instance in the vertex buffer (0 for non-instanced)</summary>
+   public readonly int InstanceStride;
 
    // Standard shaders ---------------------------------------------------------
    public static ShaderImp Bezier2D => mBezier2D ??= Load ();
@@ -99,24 +103,57 @@ class ShaderImp {
    // reads metadata and resolves the EPipeline. Actual pipeline compilation
    // is handled by PipelineFactory at startup.
    static ShaderImp Load ([CallerMemberName] string name = "") {
-      sIndex ??= Lib.ReadLines ("nori:GL/Shader/Index.txt");
+      sIndex ??= LoadIndex ();
       // Each line in the index.txt contains these:
       // 0:Name  1:SortCode  2:Mode  3:VSpec  4:Blending  5:DepthTest  6:PolygonOffset  7:StencilBehavior  8:Programs
       foreach (string line in sIndex) {
          string[] w = line.Split (' ', StringSplitOptions.RemoveEmptyEntries);
          if (w.Length >= 9 && w[0] == name) {
             int sort = int.Parse (w[1]);
-            // w[2] is Mode (OpenGL primitive topology) — ignored, WebGPU uses TriangleList for everything
+            string mode = w[2];
             EVertexSpec vspec = Enum.Parse<EVertexSpec> (w[3], true);
             bool blending = w[4] == "1", depthtest = w[5] == "1", offset = w[6] == "1";
             EStencilBehavior stencil = Enum.Parse<EStencilBehavior> (w[7], true);
             EPipeline pipeline = ResolvePipeline (name);
-            return new (name, sort, pipeline, vspec, blending, depthtest, offset, stencil);
+            // Compute instancing metadata from Mode field
+            bool instanced = mode is "Lines" or "Points" or "Patches";
+            int vpi = instanced ? 6 : 0;
+            int instStride = instanced
+               ? Attrib.GetSize (vspec) * (mode is "Lines" or "Patches" ? 2 : 1) : 0;
+            return new (name, sort, pipeline, vspec, blending, depthtest, offset, stencil, vpi, instStride);
          }
       }
       throw new NotImplementedException ($"Shader {name} not found in Shader/Index.txt");
    }
    static string[]? sIndex;
+
+   // Load shader index from WAD file, falling back to embedded data in WASM
+   static string[] LoadIndex () {
+      try { return Lib.ReadLines ("nori:GL/Shader/Index.txt"); } catch { }
+      return sEmbeddedIndex.Split ('\n');
+   }
+   const string sEmbeddedIndex =
+      "Line2D 1 Lines Vec2F 1 0 0 None World2D.vert|Line2D.geom|Line.frag\n" +
+      "Line3D 101 Lines Vec3F 1 1 0 None World3D.vert|Line3D.geom|Line.frag\n" +
+      "Bezier2D 2 Patches Vec2F 1 0 0 None World2D.vert|Bezier.tctrl|Bezier.teval|Line2D.geom|Line.frag\n" +
+      "Point2D 3 Points Vec2F 1 0 0 None World2D.vert|Point2D.geom|Point.frag\n" +
+      "Point3D 4 Points Vec3F 1 0 0 None World3D.vert|Point3D.geom|Point.frag\n" +
+      "Triangle2D 5 Triangles Vec2F 0 0 0 None World2D.vert|Flat.frag\n" +
+      "Quad2D 6 Quads Vec2F 0 0 0 None World2D.vert|Flat.frag\n" +
+      "BlackLine 102 Lines Vec3F_Vec3H 1 1 0 None World3D.vert|Line3D.geom|Line.frag\n" +
+      "GlassLine 103 Lines Vec3F_Vec3H 1 1 0 None World3D.vert|Line3D.geom|GlassLine.frag\n" +
+      "Gourad 7 Triangles Vec3F_Vec3H 0 1 1 None Gourad.vert|Gourad.frag\n" +
+      "Phong 8 Triangles Vec3F_Vec3H 0 1 1 None Phong.vert|Phong.frag\n" +
+      "PhongPink 9 Triangles Vec3F_Vec3H 0 1 1 None Phong.vert|PhongPink.frag\n" +
+      "Pick 10 Triangles Vec3F_Vec3H 0 1 1 None FlatFacet.vert|Flat.frag\n" +
+      "Glass 11 Triangles Vec3F_Vec3H 0 1 1 None Gourad.vert|Glass.frag\n" +
+      "FlatFacet 12 Triangles Vec3F_Vec3H 0 1 1 None FlatFacet.vert|FlatFacet.geom|FlatFacet.frag\n" +
+      "TextPx 104 Points Vec4S_Int 1 0 0 None TextPx.vert|Text2D.geom|Text.frag\n" +
+      "DashLine2D 13 Lines Vec2F 1 0 0 None World2D.vert|DashLine2D.geom|DashLine.frag\n" +
+      "TriFanCover 105 TriangleFan Vec2F 0 0 0 Cover World2D.vert|Flat.frag\n" +
+      "TriFanStencil 14 TriangleFan Vec2F 0 0 0 Stencil World2D.vert|Flat.frag\n" +
+      "Text2D 106 Points Vec2F_Vec4S_Int 1 0 0 None Text2D.vert|Text2D.geom|Text.frag\n" +
+      "Text3D 107 Points Vec3F_Vec4S_Int 1 1 0 None Text3D.vert|Text3D.geom|Text.frag";
 
    public override string ToString ()
       => $"Shader {Name} (Pipeline: {Pipeline})";

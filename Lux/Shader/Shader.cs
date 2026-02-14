@@ -232,7 +232,7 @@ abstract class Shader<TVertex, TUniform> : Shader, IComparer<TUniform> where TVe
       }
       // Upload vertex data and issue draw call via IGPU
       fixed (void* pSorted = &mSorted[0])
-         StreamBuffer.It.Draw (pSorted, nSortedUsed / cbStruct, cbStruct);
+         StreamBuffer.It.Draw (pSorted, nSortedUsed / cbStruct, cbStruct, Pgm);
    }
    byte[]? mSorted;
 

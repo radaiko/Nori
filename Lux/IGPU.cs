@@ -54,10 +54,10 @@ public interface IGPU {
    void SetBindGroup (int group, nint data, int size);
 
    /// <summary>Draw non-indexed primitives</summary>
-   void Draw (int vertexCount, int firstVertex);
+   void Draw (int vertexCount, int instanceCount, int firstVertex);
 
    /// <summary>Draw indexed primitives</summary>
-   void DrawIndexed (int indexCount, int firstIndex, int baseVertex);
+   void DrawIndexed (int indexCount, int instanceCount, int firstIndex, int baseVertex);
 
    // Texture operations -------------------------------------------------------
    /// <summary>Create a 2D RGBA texture from pixel data and return its handle</summary>

@@ -44,7 +44,13 @@ public class LineFont {
       // has been ommitted during the load in favor of simpler code.
       try { lines = Lib.ReadLines ($"nori:DXF/{lname}.lfont"); } catch { }
       if (lines == null || lines.Length == 0) {
-         var lfont = Get ("simplex");
+         if (lname == "simplex") {
+            // Cannot load even the default font (e.g. in WASM without WAD) —
+            // return a minimal empty font to prevent StackOverflow from recursion
+            font = new LineFont ("simplex", 0, 1, 0, 1.2, FrozenDictionary<int, Glyph>.Empty);
+            return mFonts["simplex"] = font;
+         }
+         LineFont lfont = Get ("simplex");
          mFonts[lname] = lfont;
          return lfont;
       }

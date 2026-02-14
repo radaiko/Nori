@@ -38,6 +38,6 @@ internal static partial class NoriWebGPU {
    // Initialization -----------------------------------------------------------
    /// <summary>Initialize the WebGPU device and canvas context</summary>
    [JSImport ("noriGpu.init", "nori")]
-   internal static partial void Init (string canvasId);
+   internal static partial Task Init (string canvasId);
 }
 #endregion

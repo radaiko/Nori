@@ -58,6 +58,6 @@ class WebSurface : ISurface {
    string mCanvasId;
    bool mDirty;
    Subject<Vec2S> mResized = new ();
-   Subject<int> mReady = new ();
+   ReplaySubject<int> mReady = new (1);
 }
 #endregion

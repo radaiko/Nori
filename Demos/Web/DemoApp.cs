@@ -48,18 +48,23 @@ public static partial class DemoApp {
    static void SelectDemo (int index) {
       if (index < 0 || index >= DemoRegistry.Scenes.Length) return;
       sPanel?.Clear ();
-      Scene scene = DemoRegistry.Scenes[index].Factory ();
-      Lux.UIScene = scene;
-      NoriWebDemos.SetActiveDemo (index);
-      // Check if the scene has a CreateUI(ISettingsPanel) method via reflection
-      // (scene types are internal in Demos.Shared, so we cannot cast directly)
-      System.Reflection.MethodInfo? createUI = scene.GetType ().GetMethod (
-         "CreateUI", [typeof (ISettingsPanel)]);
-      if (createUI != null && sPanel != null)
-         createUI.Invoke (scene, [sPanel]);
-      // Similarly check for scenes that want BackFacesPink
-      string name = DemoRegistry.Scenes[index].Name;
-      if (name is "Load STEP" or "Load T3X File") Lux.BackFacesPink = true;
+      try {
+         Scene scene = DemoRegistry.Scenes[index].Factory ();
+         Lux.UIScene = scene;
+         NoriWebDemos.SetActiveDemo (index);
+         // Check if the scene has a CreateUI(ISettingsPanel) method via reflection
+         // (scene types are internal in Demos.Shared, so we cannot cast directly)
+         System.Reflection.MethodInfo? createUI = scene.GetType ().GetMethod (
+            "CreateUI", [typeof (ISettingsPanel)]);
+         if (createUI != null && sPanel != null)
+            createUI.Invoke (scene, [sPanel]);
+         // Similarly check for scenes that want BackFacesPink
+         string name = DemoRegistry.Scenes[index].Name;
+         if (name is "Load STEP" or "Load T3X File") Lux.BackFacesPink = true;
+      } catch (Exception ex) {
+         Console.WriteLine ($"Demo failed: {ex.Message}");
+         NoriWebDemos.SetActiveDemo (index);
+      }
    }
 
    // Private data -------------------------------------------------------------

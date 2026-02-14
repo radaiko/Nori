@@ -92,7 +92,7 @@ public partial class TraceVN : VNode {
 
    // Set up the text color, typeface and ZLevel (to be above all the other drawing)
    public override void SetAttributes () {
-      if (mLines.Count > 0)
+      if (mLines.Count > 0 && Face != null)
          (Lux.Color, Lux.TypeFace, Lux.ZLevel) = (TextColor, Face, 100);
    }
 
@@ -101,7 +101,8 @@ public partial class TraceVN : VNode {
    // lines based on the \n separator. If there are more lines of text than we can
    // display, the oldest lines are removed
    void Add (string s) {
-      _ = Face;      // Reading this computes a good value for mDYLine (text height in pixels)
+      TypeFace? face = Face;
+      if (face != null) mDYLine = face.LineHeight;
       foreach (string w in s.TrimEnd ('\n').Split ('\n'))
          mLines.Add ((DateTime.Now, w));
       while (mLines.Count > mcLines) mLines.RemoveAt (0);
@@ -110,17 +111,22 @@ public partial class TraceVN : VNode {
 
    // Called when we first print text to build the TypeFace. This also starts a timer
    // so we can remove printed text after a few seconds
-   TypeFace Face {
+   TypeFace? Face {
       get {
-         if (mFace == null) {
-            mFace = new (Lib.ReadBytes ("nori:GL/Fonts/RobotoMono-Regular.ttf"), 16);
-            mDYLine = mFace.LineHeight;
-            mTimer = new Timer (_ => Lib.Post (() => OnTick (null, EventArgs.Empty)), null, 0, 1000);
+         if (mFace == null && !mFontFailed) {
+            try {
+               mFace = new (Lib.ReadBytes ("nori:GL/Fonts/RobotoMono-Regular.ttf"), 16);
+               mDYLine = mFace.LineHeight;
+               mTimer = new Timer (_ => Lib.Post (() => OnTick (null, EventArgs.Empty)), null, 0, 1000);
+            } catch {
+               mFontFailed = true;
+            }
          }
          return mFace;
       }
    }
    TypeFace? mFace;
+   bool mFontFailed;
 
    // Timer handler, removes text that is more than 7 seconds old
    void OnTick (object? s, EventArgs e) {

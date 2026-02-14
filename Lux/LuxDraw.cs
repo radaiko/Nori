@@ -318,7 +318,8 @@ public static partial class Lux {
       if (text.IsWhiteSpace ()) return;
       // First, get the basic cells as we would for a TextPx shader, assuming the text
       // is starting at a position of (0,0)
-      var face = TypeFace ?? TypeFace.Default;
+      TypeFace? face = TypeFace ?? TypeFace.Default;
+      if (face == null) return;
       Span<TextPxShader.Args> cells = stackalloc TextPxShader.Args[text.Length];
       int x = GetTextCells (text, offset, cells);
 
@@ -366,7 +367,8 @@ public static partial class Lux {
       if (text.IsWhiteSpace ()) return;
       // First, get the basic cells as we would for a TextPx shader, assuming the text
       // is starting at a position of (0,0)
-      var face = TypeFace ?? TypeFace.Default;
+      TypeFace? face = TypeFace ?? TypeFace.Default;
+      if (face == null) return;
       Span<TextPxShader.Args> cells = stackalloc TextPxShader.Args[text.Length];
       int x = GetTextCells (text, offset, cells);
 
@@ -409,6 +411,7 @@ public static partial class Lux {
    /// - TypeFace  : font, style, size of the text being drawn
    public static void TextPx (ReadOnlySpan<char> text, Vec2S pos) {
       if (text.IsWhiteSpace ()) return;
+      if ((TypeFace ?? TypeFace.Default) == null) return;
       Span<TextPxShader.Args> cells = stackalloc TextPxShader.Args[text.Length];
       GetTextCells (text, pos, cells);
       TextPxShader.It.Draw (cells);
@@ -427,7 +430,8 @@ public static partial class Lux {
    // the final X position after all the rendering (which is useful if we want to do a right-aligned
    // text positioning)
    static int GetTextCells (ReadOnlySpan<char> text, Vec2S pos, Span<TextPxShader.Args> cells) {
-      var face = TypeFace ?? TypeFace.Default;
+      TypeFace? face = TypeFace ?? TypeFace.Default;
+      if (face == null) return 0;
       int x = pos.X, y = pos.Y, n = 0;  uint idx0 = 0;
       foreach (var ch in text) {
          uint idx1 = face.GetGlyphIndex (ch);         // Get glyph index for the character

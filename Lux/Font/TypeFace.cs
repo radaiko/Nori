@@ -58,12 +58,19 @@ public class TypeFace {
    }
    FTEncoding[]? mEncodings;
 
-   /// <summary>Returns an always-available default typeface (Roboto, 18px)</summary>
-   public static TypeFace Default {
-      get => mDefault ??= new (Lib.ReadBytes ("nori:GL/Fonts/Roboto-Regular.ttf"), (int)(9 * Lux.DPIScale + 0.5));
+   /// <summary>Returns an always-available default typeface (Roboto, 18px), or null in WASM</summary>
+   public static TypeFace? Default {
+      get {
+         if (mDefault == null && !sDefaultFailed) {
+            try { mDefault = new (Lib.ReadBytes ("nori:GL/Fonts/Roboto-Regular.ttf"), (int)(9 * Lux.DPIScale + 0.5)); }
+            catch { sDefaultFailed = true; }
+         }
+         return mDefault;
+      }
       set => mDefault = value;
    }
    static TypeFace? mDefault;
+   static bool sDefaultFailed;
 
    /// <summary>Set the Gamma value to use when rasterizing the font</summary>
    /// Monitor gamma values range from 1.8 to 2.2 typically, so we pick 2.0 as a close-enough

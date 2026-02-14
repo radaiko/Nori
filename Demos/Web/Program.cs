@@ -2,6 +2,7 @@
 // ╔═╦╦═╦╦╬╣ Program.cs
 // ║║║║╬║╔╣║ Blazor WASM entry point — initializes Nori platform, GPU and Lux for browser demos
 // ╚╩═╩═╩╝╚╝ ───────────────────────────────────────────────────────────────────────────────────────
+using System.Net.Http;
 using System.Runtime.InteropServices.JavaScript;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using Nori;
@@ -17,11 +18,17 @@ WebAssemblyHost host = builder.Build ();
 await JSHost.ImportAsync ("nori-platform",
    "../_content/Nori.Platform.Web/nori-platform.js");
 await JSHost.ImportAsync ("nori-demos",
-   "../wwwroot/nori-demos.js");
+   "../nori-demos.js");
 await JSHost.ImportAsync ("nori",
    "../_content/Nori.GPU.Web/nori-gpu.js");
 
-// Initialize the Nori core library
+// Pre-fetch data assets into the WASM virtual filesystem before initializing Nori.
+// This sets NORIROOT so all file paths resolve to /data/... in the vfs.
+Environment.SetEnvironmentVariable ("NORIROOT", WebAssetLoader.VfsRoot);
+HttpClient http = new () { BaseAddress = new Uri (builder.HostEnvironment.BaseAddress) };
+await WebAssetLoader.LoadAsync (http);
+
+// Initialize the Nori core library (now with vfs assets available)
 Lib.Init ();
 Lux2.Init ();
 
@@ -30,7 +37,7 @@ WebPlatform platform = new ("noriCanvas");
 ISurface surface = platform.CreateSurface ("Nori Demos", 1280, 800);
 
 // Initialize the WebGPU backend
-WebGPU.Init ("noriCanvas");
+await WebGPU.Init ("noriCanvas");
 WebGPU gpu = new ();
 
 // Initialize the Lux rendering engine with the GPU backend and surface
@@ -42,7 +49,8 @@ SceneManipulator manipulator = new (platform.Input);
 Lux.OnReady.Subscribe (_ => DemoApp.Init ());
 
 // Start the animation frame loop — WebPlatform uses requestAnimationFrame
-// so this returns immediately and renders via JS callbacks
-platform.Run (dt => { });
+// so this returns immediately and renders via JS callbacks.
+// Lux.Tick checks the dirty flag and renders when needed.
+platform.Run (dt => Lux.Tick ());
 
 await host.RunAsync ();

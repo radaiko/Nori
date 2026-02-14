@@ -26,7 +26,7 @@ public static partial class Lux {
 
    /// <summary>Subscribe to this to know when Lux is ready (event raised only once)</summary>
    public static IObservable<int> OnReady => mOnReady;
-   internal static Subject<int> mOnReady = new ();
+   internal static ReplaySubject<int> mOnReady = new (1);
 
    /// <summary>The platform surface used for cursor visibility and redraw requests</summary>
    public static ISurface? Surface { get => mSurface; set => mSurface = value; }
@@ -152,6 +152,7 @@ public static partial class Lux {
       Shader.StartFrame ();
       scene?.Render (viewport);
       object? obj = EndRender (target, fmt);
+      if (target == ETarget.Screen) RenderState.It.GPU.Present ();
 
       // Various post-processing after frame render
       // Issue stats, and keep 'continuous render' loop going
@@ -249,7 +250,17 @@ public static partial class Lux {
    }
 
    /// <summary>Prompts the Lux system to redraw the screen (asynchronous)</summary>
-   public static void Redraw () => mSurface?.Invalidate ();
+   public static void Redraw () { mNeedRedraw = true; mSurface?.Invalidate (); }
+
+   /// <summary>Called from the platform's animation-frame callback to render when dirty</summary>
+   /// On web (requestAnimationFrame), the platform calls Tick() each frame. On desktop, the
+   /// WPF CompositionTarget.Rendering event handles rendering directly, so Tick() is unused.
+   public static void Tick () {
+      if (!mReady || mRendering || mSurface == null || !mNeedRedraw) return;
+      mNeedRedraw = false;
+      Render (UIScene, mSurface.Size, ETarget.Screen, DIBitmap.EFormat.Unknown);
+   }
+   static bool mNeedRedraw;
 
    /// <summary>This is called to initiate 'continuous rendering'</summary>
    /// This function takes a 'callback' that will be invoked after each frame is rendered. Once
