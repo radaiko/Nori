@@ -5,6 +5,7 @@
 import type { ClientScene } from './scene-graph.js';
 import type { Renderer } from './renderer.js';
 import type { NoriConnection } from '../protocol/connection.js';
+import { InteractionType } from '../protocol/messages.js';
 
 // ---------------------------------------------------------------------------
 // Click detection threshold (pixels of total movement)
@@ -27,6 +28,9 @@ export class InputHandler {
   private lastY: number = 0;
   private startX: number = 0;
   private startY: number = 0;
+
+  // Hover throttle
+  private lastHoverTime: number = 0;
 
   // Touch state for pinch-zoom
   private activeTouches: Map<number, { x: number; y: number }> = new Map();
@@ -187,8 +191,33 @@ export class InputHandler {
   }
 
   private onPointerMove(e: PointerEvent): void {
-    if (!this.isDragging) return;
     if (e.pointerType === 'touch') return;
+
+    if (!this.isDragging) {
+      // Not dragging — send hover interactions for 2D scenes.
+      // Use getCoalescedEvents() to recover all intermediate mouse positions
+      // that the browser coalesced into this single pointermove event.
+      // Without this, fast mouse movements produce very few points.
+      if (this.connection && this.scene.sceneType === '2d') {
+        const rect = this.canvas.getBoundingClientRect();
+        const coalesced = e.getCoalescedEvents?.() ?? [e];
+        const events = coalesced.length > 0 ? coalesced : [e];
+        for (const ce of events) {
+          const world = this.scene.screenToWorld2D(
+            ce.clientX - rect.left, ce.clientY - rect.top,
+            rect.width, rect.height,
+          );
+          this.connection.sendInteraction({
+            type: InteractionType.Hover,
+            x: world.x,
+            y: world.y,
+            z: 0,
+            modifiers: 0,
+          });
+        }
+      }
+      return;
+    }
 
     const dx = e.clientX - this.lastX;
     const dy = e.clientY - this.lastY;
@@ -224,6 +253,20 @@ export class InputHandler {
           x: Math.round(e.clientX - rect.left),
           y: Math.round(e.clientY - rect.top),
         });
+        // Also send click interaction with world coordinates for 2D scenes
+        if (this.scene.sceneType === '2d') {
+          const world = this.scene.screenToWorld2D(
+            e.clientX - rect.left, e.clientY - rect.top,
+            rect.width, rect.height,
+          );
+          this.connection.sendInteraction({
+            type: InteractionType.Click,
+            x: world.x,
+            y: world.y,
+            z: 0,
+            modifiers: 0,
+          });
+        }
       }
 
       this.isDragging = false;

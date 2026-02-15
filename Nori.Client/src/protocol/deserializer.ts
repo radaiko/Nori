@@ -88,8 +88,8 @@ function deserializeEntityData(arr: unknown[]): EntityDataMsg {
 function deserializePrimitive(arr: unknown[]): RenderPrimitiveMsg {
   return {
     type: arr[0] as number,
-    data: toNumberArray(arr[1]),
-    indices: arr[2] != null ? toIntArray(arr[2]) : null,
+    data: toFloatArrayPassthrough(arr[1]),
+    indices: arr[2] != null ? toIntArrayPassthrough(arr[2]) : null,
     color: toUint8Array(arr[3]),
     lineWidth: arr[4] as number,
     lineType: arr[5] as number,
@@ -100,14 +100,15 @@ function deserializePrimitive(arr: unknown[]): RenderPrimitiveMsg {
     shadeMode: arr[10] as number,
     text: arr[11] as string | null,
     textAlign: arr[12] as number,
-    wireIndices: arr[13] != null ? toIntArray(arr[13]) : null,
-    boundData: arr[14] != null ? toNumberArray(arr[14]) : null,
+    wireIndices: arr[13] != null ? toIntArrayPassthrough(arr[13]) : null,
+    boundData: arr[14] != null ? toFloatArrayPassthrough(arr[14]) : null,
   };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Helpers — MessagePack can decode numbers as typed arrays or plain arrays,
-// so we normalize to standard JS arrays for consistent downstream handling.
+// Helpers — MessagePack can decode numbers as typed arrays or plain arrays.
+// Passthrough variants preserve typed arrays to avoid unnecessary copies;
+// toNumberArray is kept for fields that need number[] (bounds, transforms).
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /** Convert a decoded value to a number[] (handles Float32Array, Float64Array, plain arrays) */
@@ -118,12 +119,20 @@ function toNumberArray(val: unknown): number[] {
   return [];
 }
 
-/** Convert a decoded value to a number[] of integers (handles Int32Array, Uint32Array, plain arrays) */
-function toIntArray(val: unknown): number[] {
-  if (val == null) return [];
-  if (val instanceof Int32Array || val instanceof Uint32Array) return Array.from(val);
+/** Preserve typed float arrays from MessagePack; only convert plain arrays */
+function toFloatArrayPassthrough(val: unknown): Float32Array | Float64Array | number[] {
+  if (val == null) return new Float32Array(0);
+  if (val instanceof Float32Array || val instanceof Float64Array) return val;
   if (Array.isArray(val)) return val as number[];
-  return [];
+  return new Float32Array(0);
+}
+
+/** Preserve typed int arrays from MessagePack; only convert plain arrays */
+function toIntArrayPassthrough(val: unknown): Uint32Array | Int32Array | number[] {
+  if (val == null) return new Uint32Array(0);
+  if (val instanceof Uint32Array || val instanceof Int32Array) return val;
+  if (Array.isArray(val)) return val as number[];
+  return new Uint32Array(0);
 }
 
 /** Convert a decoded value to Uint8Array (handles plain arrays and typed arrays) */

@@ -69,21 +69,21 @@ export interface EntityDataMsg {
 
 /** RenderPrimitiveMsg: keys [0..14] — a single renderable primitive with draw attributes */
 export interface RenderPrimitiveMsg {
-  type: number;                    // EPrimType (server enum, starts at 1)
-  data: number[];                  // Vertex data (floats)
-  indices: number[] | null;        // Index data (optional, for Mesh3D triangles)
-  color: Uint8Array;               // RGBA bytes
+  type: number;                                      // EPrimType (server enum, starts at 1)
+  data: Float32Array | Float64Array | number[];      // Vertex data (floats)
+  indices: Uint32Array | Int32Array | number[] | null; // Index data (optional, for Mesh3D triangles)
+  color: Uint8Array;                                 // RGBA bytes
   lineWidth: number;
-  lineType: number;                // ELineType
+  lineType: number;                                  // ELineType
   ltScale: number;
   pointSize: number;
   transformIndex: number;
   zLevel: number;
-  shadeMode: number;               // EShadeMode
+  shadeMode: number;                                 // EShadeMode
   text: string | null;
-  textAlign: number;               // ETextAlign
-  wireIndices: number[] | null;    // Wire edge indices (separate from triangle indices)
-  boundData: number[] | null;      // Fill bounds [minX, minY, maxX, maxY]
+  textAlign: number;                                 // ETextAlign
+  wireIndices: Uint32Array | Int32Array | number[] | null; // Wire edge indices (separate from triangle indices)
+  boundData: Float32Array | Float64Array | number[] | null; // Fill bounds [minX, minY, maxX, maxY]
 }
 
 /** EntityAddMsg: key [0] — entity added to scene */

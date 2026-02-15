@@ -5,6 +5,7 @@ import { GPUDeviceManager } from './gpu-device.js';
 import { PipelineFactory, Pipeline } from './pipeline-factory.js';
 import { BufferManager } from './buffers.js';
 import { ClientScene, RenderPrimitive, PrimType } from './scene-graph.js';
+import type { NoriConnection } from '../protocol/connection.js';
 
 // ---------------------------------------------------------------------------
 // Uniform buffer sizes for each pipeline family
@@ -51,6 +52,9 @@ export class Renderer {
   private edgeTexW: number = 0;
   private edgeTexH: number = 0;
 
+  // Connection for per-frame message flushing
+  private connection: NoriConnection | null = null;
+
   // FPS tracking
   private frameCount: number = 0;
   private lastFpsTime: number = 0;
@@ -63,12 +67,20 @@ export class Renderer {
     this.scene = scene;
   }
 
-  /** Start the render loop (uncapped — renders as fast as GPU allows) */
+  /** Set the connection for per-frame message batching */
+  setConnection(conn: NoriConnection | null): void {
+    this.connection = conn;
+  }
+
+  /** Start the render loop (vsync-driven via requestAnimationFrame) */
   start(): void {
     this.lastFpsTime = performance.now();
     this.running = true;
     const loop = () => {
       if (!this.running) return;
+      // Flush all queued WebSocket messages before rendering so multiple
+      // updates between frames are batched into a single redraw.
+      this.connection?.flush();
       this.checkResize();
       if (this.dirty) {
         this.renderFrame();
@@ -82,9 +94,9 @@ export class Renderer {
         this.frameCount = 0;
         this.lastFpsTime = now;
       }
-      setTimeout(loop, 0);
+      requestAnimationFrame(loop);
     };
-    setTimeout(loop, 0);
+    requestAnimationFrame(loop);
   }
 
   /** Stop the render loop */

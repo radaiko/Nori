@@ -62,6 +62,9 @@ export class NoriConnection {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed: boolean = false;
 
+  // Message batching: raw binary messages queued here, flushed once per frame
+  private pendingMessages: Uint8Array[] = [];
+
   constructor(url: string, events: ConnectionEvents) {
     this.url = url;
     this.events = events;
@@ -94,8 +97,7 @@ export class NoriConnection {
     };
 
     this.ws.onmessage = (ev: MessageEvent) => {
-      const data = new Uint8Array(ev.data as ArrayBuffer);
-      this.handleMessage(data);
+      this.pendingMessages.push(new Uint8Array(ev.data as ArrayBuffer));
     };
   }
 
@@ -110,6 +112,25 @@ export class NoriConnection {
       this.ws.onmessage = null;
       this.ws.close();
       this.ws = null;
+    }
+  }
+
+  /** Whether there are queued messages waiting to be processed */
+  get hasPending(): boolean {
+    return this.pendingMessages.length > 0;
+  }
+
+  /**
+   * Process all queued WebSocket messages. Call once per frame from the
+   * render loop so multiple messages arriving between frames are batched
+   * into a single scene update + invalidate cycle.
+   */
+  flush(): void {
+    if (this.pendingMessages.length === 0) return;
+    const batch = this.pendingMessages;
+    this.pendingMessages = [];
+    for (const data of batch) {
+      this.handleMessage(data);
     }
   }
 

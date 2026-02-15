@@ -153,11 +153,13 @@ export class NoriRenderer {
     this.connection = new NoriConnection(this.config.serverUrl, connEvents);
     this.connection.connect();
     this.inputHandler.setConnection(this.connection);
+    this.renderer.setConnection(this.connection);
   }
 
   /** Disconnect from the server and stop rendering */
   disconnect(): void {
     this.inputHandler?.setConnection(null);
+    this.renderer?.setConnection(null);
     this.connection?.disconnect();
     this.connection = null;
     this.renderer?.stop();
@@ -336,9 +338,12 @@ function convertEntityData(msg: EntityDataMsg): RenderEntity {
  * expected by the renderer.
  */
 function convertPrimitive(msg: RenderPrimitiveMsg): RenderPrimitive {
+  // Reuse typed arrays from msgpack when possible (avoid copy)
+  const data = msg.data instanceof Float32Array ? msg.data : new Float32Array(msg.data);
+
   const prim: RenderPrimitive = {
     type: (msg.type - 1) as PrimType, // Server EPrimType starts at 1, client PrimType starts at 0
-    data: new Float32Array(msg.data),
+    data,
     color: [
       msg.color[0] ?? 255,
       msg.color[1] ?? 255,
@@ -355,7 +360,7 @@ function convertPrimitive(msg: RenderPrimitiveMsg): RenderPrimitive {
   };
 
   if (msg.indices != null) {
-    prim.indices = new Uint32Array(msg.indices);
+    prim.indices = msg.indices instanceof Uint32Array ? msg.indices : new Uint32Array(msg.indices);
   }
   if (msg.text != null) {
     prim.text = msg.text;
@@ -364,10 +369,10 @@ function convertPrimitive(msg: RenderPrimitiveMsg): RenderPrimitive {
     prim.textAlign = msg.textAlign;
   }
   if (msg.wireIndices != null) {
-    prim.wireIndices = new Uint32Array(msg.wireIndices);
+    prim.wireIndices = msg.wireIndices instanceof Uint32Array ? msg.wireIndices : new Uint32Array(msg.wireIndices);
   }
   if (msg.boundData != null) {
-    prim.boundData = new Float32Array(msg.boundData);
+    prim.boundData = msg.boundData instanceof Float32Array ? msg.boundData : new Float32Array(msg.boundData);
   }
 
   return prim;
