@@ -444,7 +444,7 @@ public static class DemoScenes {
             }
          }
          mesh = new Mesh3Builder (nodes.AsSpan ()).Build ();
-      } catch {
+      } catch (Exception) {
          // Tessellator not installed — fall back to displaying outer contour as lines
          List<Point2> pts = [];
          polys[0].Discretize (pts, 0.1, 0.5411);
@@ -593,7 +593,8 @@ public static class DemoScenes {
    /// <summary>AABB tree demo — cow mesh with bounding volume hierarchy at level 5</summary>
    static SceneInitMsg AABBTreeDemo () {
       // Load cow mesh from zip
-      ZipArchive zar = new (File.OpenRead ($"{Lib.DevRoot}/TData/IO/MESH/cow.zip"));
+      using FileStream fs = File.OpenRead ($"{Lib.DevRoot}/TData/IO/MESH/cow.zip");
+      using ZipArchive zar = new (fs);
       ZipArchiveEntry ze = zar.GetEntry ("cow.obj")!;
       ZipReadStream zstm = new (ze.Open (), ze.Length);
       Mesh3 mesh = Mesh3.LoadObj (zstm.ReadAllLines ());
@@ -608,10 +609,10 @@ public static class DemoScenes {
       foreach (Bound3 box in boxes) {
          (Bound1 bx, Bound1 by, Bound1 bz) = (box.X, box.Y, box.Z);
          Point3 a = new (bx.Min, by.Min, bz.Min), b = new (bx.Max, by.Min, bz.Min);
-         Point3 c = new (bx.Max, by.Max, bz.Min), d2 = new (bx.Min, by.Max, bz.Min);
+         Point3 c = new (bx.Max, by.Max, bz.Min), d = new (bx.Min, by.Max, bz.Min);
          Point3 e = new (bx.Min, by.Min, bz.Max), f = new (bx.Max, by.Min, bz.Max);
          Point3 g = new (bx.Max, by.Max, bz.Max), h = new (bx.Min, by.Max, bz.Max);
-         boxLines.AddRange ([a, b, b, c, c, d2, d2, a, e, f, f, g, g, h, h, e, a, e, b, f, c, g, d2, h]);
+         boxLines.AddRange ([a, b, b, c, c, d, d, a, e, f, f, g, g, h, h, e, a, e, b, f, c, g, d, h]);
       }
 
       Bound3 meshBound = mesh.Bound;
