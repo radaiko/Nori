@@ -772,17 +772,15 @@ public static class DemoScenes {
       Model3 model = new T3XReader ($"{Lib.DevRoot}/Demos/Data/5x-024-blank.t3x").Load ();
 
       List<Mesh3> meshes = [];
-      List<Mesh3.Node> nodes = []; List<int> tris = [], wires = [];
+      List<Mesh3.Node> nodes = []; List<int> tris = [];
       foreach (E3Surface ent in model.Ents.OfType<E3Surface> ()) {
          Mesh3 mesh = ent.Mesh;
          meshes.Add (mesh);
          int n = nodes.Count;
          nodes.AddRange (mesh.Vertex);
          tris.AddRange (mesh.Triangle.Select (a => a + n));
-         wires.AddRange (mesh.Wire.Select (a => a + n));
       }
-      wires.Clear ();
-      Mesh3 fullmesh = new ([.. nodes], [.. tris], [.. wires]);
+      Mesh3 fullmesh = new ([.. nodes], [.. tris], []);
 
       // Capture full mesh as Mesh3D with Glass shading
       RenderPrimitive meshPrim = RenderCapture.CaptureMesh (fullmesh, [255, 255, 255, 255], shadeMode: 4, wireframe: false);
