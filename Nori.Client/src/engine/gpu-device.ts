@@ -25,7 +25,7 @@ export class GPUDeviceManager {
     this.context.configure({
       device: this.device,
       format: this.format,
-      alphaMode: 'premultiplied',
+      alphaMode: 'opaque',
     });
     this.createDepthTexture();
   }

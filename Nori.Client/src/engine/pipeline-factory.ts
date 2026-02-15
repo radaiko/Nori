@@ -313,13 +313,19 @@ export class PipelineFactory {
       writeMask: GPUColorWrite.ALL,
     };
 
-    const depthStencil: GPUDepthStencilState | undefined = opts.depth
+    // All pipelines must declare depth/stencil format to match the render pass.
+    // 3D pipelines write depth; 2D pipelines pass through without depth testing.
+    const depthStencil: GPUDepthStencilState = opts.depth
       ? {
         format: 'depth24plus-stencil8',
         depthWriteEnabled: true,
         depthCompare: 'less-equal',
       }
-      : undefined;
+      : {
+        format: 'depth24plus-stencil8',
+        depthWriteEnabled: false,
+        depthCompare: 'always',
+      };
 
     const pipeline = device.createRenderPipeline({
       label: Pipeline[id],
@@ -338,7 +344,7 @@ export class PipelineFactory {
         topology: 'triangle-list',
         cullMode: 'none',
       },
-      ...(depthStencil ? { depthStencil } : {}),
+      depthStencil,
     });
     this.pipelines.set(id, pipeline);
   }

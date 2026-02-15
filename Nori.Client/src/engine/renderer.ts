@@ -41,6 +41,11 @@ export class Renderer {
   // Re-usable uniform buffer (sized to max uniform size)
   private uniformBuf: GPUBuffer | null = null;
 
+  // FPS tracking
+  private frameCount: number = 0;
+  private lastFpsTime: number = 0;
+  onFps: ((fps: number) => void) | null = null;
+
   constructor(gpu: GPUDeviceManager, pipelines: PipelineFactory, scene: ClientScene) {
     this.gpu = gpu;
     this.pipelines = pipelines;
@@ -50,11 +55,20 @@ export class Renderer {
 
   /** Start the render loop */
   start(): void {
+    this.lastFpsTime = performance.now();
     const loop = () => {
       this.checkResize();
       if (this.dirty) {
         this.renderFrame();
         this.dirty = false;
+        this.frameCount++;
+      }
+      // FPS reporting
+      const now = performance.now();
+      if (now - this.lastFpsTime >= 1000) {
+        this.onFps?.(this.frameCount);
+        this.frameCount = 0;
+        this.lastFpsTime = now;
       }
       this.animFrameId = requestAnimationFrame(loop);
     };
