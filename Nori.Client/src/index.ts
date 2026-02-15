@@ -10,6 +10,7 @@ import { PipelineFactory, Pipeline } from './engine/pipeline-factory.js';
 import { Renderer } from './engine/renderer.js';
 import { ClientScene, RenderEntity, RenderPrimitive, PrimType, SceneType } from './engine/scene-graph.js';
 import { BufferManager } from './engine/buffers.js';
+import { InputHandler } from './engine/input.js';
 import { NoriConnection, type ConnectionEvents } from './protocol/connection.js';
 import {
   SceneType as ProtoSceneType,
@@ -31,6 +32,7 @@ export { PipelineFactory, Pipeline } from './engine/pipeline-factory.js';
 export { Renderer } from './engine/renderer.js';
 export { ClientScene, RenderEntity, RenderPrimitive, PrimType, SceneType } from './engine/scene-graph.js';
 export { BufferManager } from './engine/buffers.js';
+export { InputHandler } from './engine/input.js';
 
 // Re-export protocol types for consumers
 export { NoriConnection, type ConnectionEvents } from './protocol/connection.js';
@@ -95,6 +97,7 @@ export class NoriRenderer {
   private gpuDevice: GPUDeviceManager | null = null;
   private pipelineFactory: PipelineFactory | null = null;
   private renderer: Renderer | null = null;
+  private inputHandler: InputHandler | null = null;
   private _scene: ClientScene;
   private connection: NoriConnection | null = null;
 
@@ -125,6 +128,9 @@ export class NoriRenderer {
     this.renderer = new Renderer(this.gpuDevice, this.pipelineFactory, this._scene);
     this.renderer.start();
 
+    // Create input handler for mouse/touch/keyboard events
+    this.inputHandler = new InputHandler(this.config.canvas, this._scene, this.renderer);
+
     // Connect WebSocket to server
     const connEvents: ConnectionEvents = {
       onSceneInit: (msg: SceneInitMsg) => this.handleSceneInit(msg),
@@ -145,10 +151,12 @@ export class NoriRenderer {
     };
     this.connection = new NoriConnection(this.config.serverUrl, connEvents);
     this.connection.connect();
+    this.inputHandler.setConnection(this.connection);
   }
 
   /** Disconnect from the server and stop rendering */
   disconnect(): void {
+    this.inputHandler?.setConnection(null);
     this.connection?.disconnect();
     this.connection = null;
     this.renderer?.stop();
@@ -228,6 +236,8 @@ export class NoriRenderer {
   /** Release all GPU resources, close connections, and clean up */
   dispose(): void {
     this.disconnect();
+    this.inputHandler?.dispose();
+    this.inputHandler = null;
     this.renderer?.dispose();
     this.renderer = null;
     this.gpuDevice?.dispose();
