@@ -2,6 +2,7 @@
 // ╔═╦╦═╦╦╬╣ DemoScenes.cs
 // ║║║║╬║╔╣║ Static builder methods that return SceneInitMsg for each demo scene
 // ╚╩═╩═╩╝╚╝ ───────────────────────────────────────────────────────────────────────────────────────
+using System.Collections.Immutable;
 using System.IO;
 using System.IO.Compression;
 namespace Nori;
@@ -19,6 +20,10 @@ public static class DemoScenes {
       "tess" => TessDemo (),
       "mes" => MESDemo (),
       "aabbtree" => AABBTreeDemo (),
+      "t3x" => T3XDemo (),
+      "stp" => STPScene (),
+      "obb" => BuildOBBDemo (),
+      "meshslice" => IntMeshPlane (),
       _ => DwgDemo (),
    };
 
@@ -635,6 +640,207 @@ public static class DemoScenes {
    }
 
    // ═══════════════════════════════════════════════════════════════════════════════
+   // 6a. T3XDemo
+   // ═══════════════════════════════════════════════════════════════════════════════
+
+   /// <summary>T3X file demo — blank (translucent) + part model overlaid</summary>
+   static SceneInitMsg T3XDemo () {
+      Model3 blank = new T3XReader ($"{Lib.DevRoot}/Demos/Data/5x-043-blank.t3x").Load ();
+      Model3 part = new T3XReader ($"{Lib.DevRoot}/Demos/Data/5x-043.t3x").Load ();
+      foreach (Ent3 ent in blank.Ents) ent.IsTranslucent = true;
+
+      EntityDataMsg[] blankEnts = RenderCapture.CaptureModel3 (blank);
+      EntityDataMsg[] partEnts = RenderCapture.CaptureModel3 (part);
+
+      // Re-number part entity IDs to avoid collision with blank entity IDs
+      int offset = blankEnts.Length;
+      for (int i = 0; i < partEnts.Length; i++)
+         partEnts[i] = new EntityDataMsg { Id = partEnts[i].Id + offset, Primitives = partEnts[i].Primitives };
+
+      Bound3 bound = blank.Bound;
+      return new SceneInitMsg {
+         SceneType = ESceneType.Scene3D,
+         BgColor = [80, 84, 88, 255],
+         Bounds = Bounds3D (bound),
+         Transforms = IdentityTransform (),
+         Entities = [.. blankEnts, .. partEnts],
+      };
+   }
+
+   // ═══════════════════════════════════════════════════════════════════════════════
+   // 6b. STPScene
+   // ═══════════════════════════════════════════════════════════════════════════════
+
+   /// <summary>STEP file demo — loads and displays a STEP model</summary>
+   static SceneInitMsg STPScene () {
+      STEPReader sr = new ($"{Lib.DevRoot}/TData/Step/S00178.stp");
+      Model3 model = sr.Load ();
+
+      Bound3 bound = model.Bound;
+      return new SceneInitMsg {
+         SceneType = ESceneType.Scene3D,
+         BgColor = [96, 96, 96, 255],
+         Bounds = Bounds3D (bound),
+         Transforms = IdentityTransform (),
+         Entities = RenderCapture.CaptureModel3 (model),
+      };
+   }
+
+   // ═══════════════════════════════════════════════════════════════════════════════
+   // 6c. BuildOBBDemo
+   // ═══════════════════════════════════════════════════════════════════════════════
+
+   /// <summary>OBB construction demo — random rotations of surfaces with exact + fast OBB wireframes</summary>
+   static SceneInitMsg BuildOBBDemo () {
+      Random r = new (1);
+      Model3 model = new T3XReader ($"{Lib.DevRoot}/TData/IO/T3X/5X-022.t3x").Load ();
+      List<E3Surface> surfaces = [.. model.Ents.OfType<E3Surface> ().OrderByDescending (a => a.Mesh.GetArea ()).Take (40)];
+
+      Bound3 b = new ();
+      List<EntityDataMsg> entities = [];
+      int entId = 0;
+
+      for (int i = 0; i < surfaces.Count; i++) {
+         E3Surface surface = surfaces[i];
+         double xR = GetAngle (), yR = GetAngle (), zR = GetAngle ();
+         Vector3 mid = (Vector3)surface.Bound.Midpoint;
+         Matrix3 xfm = Matrix3.Translation (mid)
+                 * Matrix3.Rotation (EAxis.X, xR) * Matrix3.Rotation (EAxis.Y, yR) * Matrix3.Rotation (EAxis.Z, zR)
+                 * Matrix3.Translation (-mid);
+
+         // Transform mesh vertices by the random rotation
+         Mesh3 mesh = surface.Mesh;
+         ImmutableArray<Mesh3.Node> verts = mesh.Vertex;
+         float[] data = new float[verts.Length * 6];
+         List<Point3f> xfmPts = [];
+         for (int v = 0; v < verts.Length; v++) {
+            Mesh3.Node node = verts[v];
+            Point3f pos = node.Pos * xfm;
+            Vector3 norm = ((Vector3)node.Vec) * xfm;
+            xfmPts.Add (pos);
+            int off = v * 6;
+            data[off] = pos.X; data[off + 1] = pos.Y; data[off + 2] = pos.Z;
+            data[off + 3] = (float)norm.X; data[off + 4] = (float)norm.Y; data[off + 5] = (float)norm.Z;
+         }
+
+         // Create mesh primitive with Glass shading (translucent)
+         RenderPrimitive meshPrim = new () {
+            Type = EPrimType.Mesh3D,
+            Data = data,
+            Indices = mesh.Triangle.ToArray (),
+            WireIndices = mesh.Wire.Length > 0 ? mesh.Wire.ToArray () : [],
+            Color = [255, 255, 255, 255],
+            ShadeMode = 4, // Glass
+         };
+         entities.Add (new EntityDataMsg { Id = entId++, Primitives = [meshPrim] });
+
+         // Compute OBB.Build and OBB.BuildFast on the transformed points
+         ReadOnlySpan<Point3f> ptsSpan = xfmPts.ToArray ().AsSpan ();
+         OBB obbExact = OBB.Build (ptsSpan);
+         OBB obbFast = OBB.BuildFast (ptsSpan);
+
+         // Draw exact OBB wireframe in yellow
+         List<Point3> exactLines = OBBWireframe (obbExact);
+         RenderPrimitive exactPrim = RenderCapture.CaptureLines3 (exactLines, [255, 255, 0, 255]);
+         entities.Add (new EntityDataMsg { Id = entId++, Primitives = [exactPrim] });
+
+         // Draw fast OBB wireframe in white
+         List<Point3> fastLines = OBBWireframe (obbFast);
+         RenderPrimitive fastPrim = RenderCapture.CaptureLines3 (fastLines, [255, 255, 255, 255]);
+         entities.Add (new EntityDataMsg { Id = entId++, Primitives = [fastPrim] });
+
+         b += mesh.GetBound (xfm);
+      }
+
+      return new SceneInitMsg {
+         SceneType = ESceneType.Scene3D,
+         BgColor = [128, 96, 64, 255],
+         Bounds = Bounds3D (b),
+         Transforms = IdentityTransform (),
+         Entities = entities.ToArray (),
+      };
+
+      double GetAngle () => (r.NextDouble () - 0.5) * 90.D2R ();
+   }
+
+   // ═══════════════════════════════════════════════════════════════════════════════
+   // 6d. IntMeshPlane
+   // ═══════════════════════════════════════════════════════════════════════════════
+
+   /// <summary>Mesh slicing demo — intersect a mesh with multiple planes</summary>
+   static SceneInitMsg IntMeshPlane () {
+      Model3 model = new T3XReader ($"{Lib.DevRoot}/Demos/Data/5x-024-blank.t3x").Load ();
+
+      List<Mesh3> meshes = [];
+      List<Mesh3.Node> nodes = []; List<int> tris = [], wires = [];
+      foreach (E3Surface ent in model.Ents.OfType<E3Surface> ()) {
+         Mesh3 mesh = ent.Mesh;
+         meshes.Add (mesh);
+         int n = nodes.Count;
+         nodes.AddRange (mesh.Vertex);
+         tris.AddRange (mesh.Triangle.Select (a => a + n));
+         wires.AddRange (mesh.Wire.Select (a => a + n));
+      }
+      wires.Clear ();
+      Mesh3 fullmesh = new ([.. nodes], [.. tris], [.. wires]);
+
+      // Capture full mesh as Mesh3D with Glass shading
+      RenderPrimitive meshPrim = RenderCapture.CaptureMesh (fullmesh, [255, 255, 255, 255], shadeMode: 4, wireframe: false);
+
+      // Compute plane intersections
+      Bound3 bound = fullmesh.Bound;
+      MeshSlicer pmi = new ([.. meshes]);
+      List<Polyline3> output = [];
+      int step = 25;
+      for (int i = step; i < 100; i += step) {
+         double x = (i / 100.0).Along (bound.X);
+         pmi.Compute (new PlaneDef (new (x, 0, 0), Vector3.XAxis), output);
+         double y = (i / 100.0).Along (bound.Y);
+         pmi.Compute (new PlaneDef (new (0, y, 0), Vector3.YAxis), output);
+         double z = (i / 100.0).Along (bound.Z);
+         pmi.Compute (new PlaneDef (new (0, 0, z), Vector3.ZAxis), output);
+      }
+
+      // Convert polylines to line pairs
+      List<Point3> linePairs = [];
+      List<Point3> endPts = [];
+      foreach (Polyline3 poly in output) {
+         ImmutableArray<Point3> pts = poly.Pts;
+         for (int i = 0; i < pts.Length - 1; i++) {
+            linePairs.Add (pts[i]);
+            linePairs.Add (pts[i + 1]);
+         }
+         if (!pts[0].EQ (pts[^1])) { endPts.Add (poly.Start); endPts.Add (poly.End); }
+      }
+
+      List<EntityDataMsg> entities = [];
+      int entId = 0;
+
+      // Full mesh entity
+      entities.Add (new EntityDataMsg { Id = entId++, Primitives = [meshPrim] });
+
+      // Intersection lines entity
+      if (linePairs.Count > 0) {
+         RenderPrimitive linesPrim = RenderCapture.CaptureLines3 (linePairs, [255, 255, 255, 255], lineWidth: 2f);
+         entities.Add (new EntityDataMsg { Id = entId++, Primitives = [linesPrim] });
+      }
+
+      // Open polyline endpoints
+      if (endPts.Count > 0) {
+         RenderPrimitive ptsPrim = RenderCapture.CapturePoints3 (endPts, [255, 255, 0, 255], pointSize: 7f);
+         entities.Add (new EntityDataMsg { Id = entId++, Primitives = [ptsPrim] });
+      }
+
+      return new SceneInitMsg {
+         SceneType = ESceneType.Scene3D,
+         BgColor = [32, 64, 96, 255],
+         Bounds = Bounds3D (bound),
+         Transforms = IdentityTransform (),
+         Entities = entities.ToArray (),
+      };
+   }
+
+   // ═══════════════════════════════════════════════════════════════════════════════
    // Helpers
    // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -646,6 +852,17 @@ public static class DemoScenes {
 
    static float[] Bounds3D (Bound3 b)
       => [b.X.Min, b.Y.Min, b.Z.Min, b.X.Max, b.Y.Max, b.Z.Max];
+
+   /// <summary>Build OBB wireframe as 12 line-pair edges (24 points)</summary>
+   static List<Point3> OBBWireframe (OBB bx) {
+      Vector3 x = (Vector3)(bx.X * bx.Extent.X);
+      Vector3 y = (Vector3)(bx.Y * bx.Extent.Y);
+      Vector3 z = (Vector3)(bx.Z * bx.Extent.Z);
+      Point3 C = (Point3)bx.Center;
+      Point3 a = C - x - y - z, b = C + x - y - z, c = C + x + y - z, d = C - x + y - z;
+      Point3 e = C - x - y + z, f = C + x - y + z, g = C + x + y + z, h = C - x + y + z;
+      return [a, b, b, c, c, d, d, a, e, f, f, g, g, h, h, e, a, e, b, f, c, g, d, h];
+   }
 
    /// <summary>Capture a list of Poly as Lines2D + Beziers2D primitives</summary>
    static void CapturePolys (IEnumerable<Poly> polys, byte[] rgba, List<RenderPrimitive> prims,
