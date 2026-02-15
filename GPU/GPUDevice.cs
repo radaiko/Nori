@@ -34,6 +34,61 @@ public unsafe class GPUDevice : IDisposable {
       return gpu;
    }
 
+   /// <summary>Create a GPUDevice with only the WebGPU API and instance (no adapter/device yet)</summary>
+   public static GPUDevice CreateInstanceOnly () {
+      GPUDevice gpu = new ();
+      gpu.mApi = WebGPU.GetApi ();
+      InstanceDescriptor instanceDesc = new ();
+      gpu.mInstance = gpu.mApi.CreateInstance (&instanceDesc);
+      if (gpu.mInstance == null) throw new Exception ("Failed to create WebGPU instance");
+      return gpu;
+   }
+
+   /// <summary>Complete device initialization with an existing surface (adapter, device, queue)</summary>
+   public void InitDevice (Surface* surface) {
+      // Request adapter (synchronous via callback)
+      RequestAdapterOptions adapterOpts = new () {
+         CompatibleSurface = surface,
+         PowerPreference = PowerPreference.HighPerformance
+      };
+      Adapter* adapter = null;
+      mApi.InstanceRequestAdapter (
+         mInstance, in adapterOpts,
+         new PfnRequestAdapterCallback ((_, a, _, _) => adapter = a),
+         null
+      );
+      mAdapter = adapter;
+      if (mAdapter == null) throw new Exception ("Failed to request WebGPU adapter");
+
+      // Query surface capabilities for preferred format
+      SurfaceCapabilities caps = new ();
+      mApi.SurfaceGetCapabilities (surface, mAdapter, &caps);
+      mSurfaceFormat = caps.Formats != null ? caps.Formats[0] : TextureFormat.Bgra8Unorm;
+
+      // Request device (synchronous via callback)
+      DeviceDescriptor deviceDesc = new () {
+         DeviceLostCallback = new PfnDeviceLostCallback (OnDeviceLost)
+      };
+      Device* device = null;
+      mApi.AdapterRequestDevice (
+         mAdapter, in deviceDesc,
+         new PfnRequestDeviceCallback ((_, d, _, _) => device = d),
+         null
+      );
+      mDevice = device;
+      if (mDevice == null) throw new Exception ("Failed to request WebGPU device");
+
+      // Set up uncaptured error callback
+      mApi.DeviceSetUncapturedErrorCallback (
+         mDevice,
+         new PfnErrorCallback (OnUncapturedError),
+         null
+      );
+
+      // Get the default queue
+      mQueue = mApi.DeviceGetQueue (mDevice);
+   }
+
    /// <summary>Release all WebGPU resources</summary>
    public void Dispose () {
       if (mDevice != null) { mApi.DeviceRelease (mDevice); mDevice = null; }

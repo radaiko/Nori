@@ -30,7 +30,7 @@ struct VertexOutput {
 
 // Quad vertices: 6 vertices forming 2 triangles (0,1,2) and (2,1,3)
 // Corner layout: 0=start+perp, 1=end+perp, 2=start-perp, 3=end-perp
-const QUAD_IDX = array<u32, 6>(0u, 1u, 2u, 2u, 1u, 3u);
+var<private> QUAD_IDX: array<u32, 6> = array<u32, 6>(0u, 1u, 2u, 2u, 1u, 3u);
 
 @vertex
 fn vs_main(@builtin(vertex_index) vid: u32, input: VertexInput) -> VertexOutput {

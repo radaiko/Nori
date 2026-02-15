@@ -1,0 +1,76 @@
+Total messages: 74 (Errors: 1, Warnings: 0)
+
+[ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://localhost:8090/favicon.ico:0
+[LOG] [nori-gpu] init called with canvasId=noriCanvas @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:939
+[LOG] [nori-gpu] init complete, 21 pipelines created @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1007
+[LOG] Demo failed: IO_PathNotFound_Path, /N:/TData/Misc/LeafDwg.txt @ http://localhost:8090/_framework/blazor.webassembly.js:0
+[LOG] [nori-gpu] executeCommands: 40 bytes @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1013
+[LOG] [nori-gpu] op=18 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=1 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=2 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=7 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] executeCommands: 10 bytes @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1013
+[LOG] [nori-gpu] op=4 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] executeCommands: 22 bytes @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1013
+[LOG] [nori-gpu] op=8 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=11 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] executeCommands: 22 bytes @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1013
+[LOG] [nori-gpu] op=8 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=11 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] executeCommands: 22 bytes @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1013
+[LOG] [nori-gpu] op=8 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=11 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] executeCommands: 22 bytes @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1013
+[LOG] [nori-gpu] op=8 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=11 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] executeCommands: 27 bytes @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1013
+[LOG] [nori-gpu] op=8 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=11 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=7 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] executeCommands: 22 bytes @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1013
+[LOG] [nori-gpu] op=8 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=11 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] executeCommands: 22 bytes @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1013
+[LOG] [nori-gpu] op=8 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=11 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] executeCommands: 22 bytes @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1013
+[LOG] [nori-gpu] op=8 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=11 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] executeCommands: 23 bytes @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1013
+[LOG] [nori-gpu] op=8 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=11 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=3 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] executeCommands: 40 bytes @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1013
+[LOG] [nori-gpu] op=18 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=1 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=2 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=7 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] executeCommands: 22 bytes @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1013
+[LOG] [nori-gpu] op=8 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=11 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] executeCommands: 22 bytes @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1013
+[LOG] [nori-gpu] op=8 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=11 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] executeCommands: 22 bytes @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1013
+[LOG] [nori-gpu] op=8 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=11 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] executeCommands: 22 bytes @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1013
+[LOG] [nori-gpu] op=8 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=11 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] executeCommands: 27 bytes @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1013
+[LOG] [nori-gpu] op=8 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=11 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=7 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] executeCommands: 22 bytes @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1013
+[LOG] [nori-gpu] op=8 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=11 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] executeCommands: 22 bytes @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1013
+[LOG] [nori-gpu] op=8 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=11 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] executeCommands: 22 bytes @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1013
+[LOG] [nori-gpu] op=8 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=11 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] executeCommands: 23 bytes @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1013
+[LOG] [nori-gpu] op=8 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=11 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019
+[LOG] [nori-gpu] op=3 @ http://localhost:8090/_content/Nori.GPU.Web/nori-gpu.js:1019

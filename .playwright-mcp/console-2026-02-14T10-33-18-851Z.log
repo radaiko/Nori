@@ -1,0 +1,24 @@
+[      68ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://localhost:8090/_framework/Nori.Core.8mq2qhgmy9.wasm:0
+[      68ms] [ERROR] Error in mono_download_assets: Error: download 'http://localhost:8090/_framework/Nori.Core.8mq2qhgmy9.wasm' for Nori.Core.8mq2qhgmy9.wasm failed 404 File not found @ http://localhost:8090/_framework/blazor.webassembly.js:0
+[      69ms] [ERROR] MONO_WASM: download 'http://localhost:8090/_framework/Nori.Core.8mq2qhgmy9.wasm' for Nori.Core.8mq2qhgmy9.wasm failed 404 File not found
+Error: download 'http://localhost:8090/_framework/Nori.Core.8mq2qhgmy9.wasm' for Nori.Core.8mq2qhgmy9.wasm failed 404 File not found
+    at http://localhost:8090/_framework/dotnet.js:4:12703
+    at async ae (http://localhost:8090/_framework/dotnet.js:4:11546)
+    at async se (http://localhost:8090/_framework/dotnet.js:4:10806) @ http://localhost:8090/_framework/dotnet.js:3
+[      69ms] [ERROR] Error in mono_download_assets: Error: download 'http://localhost:8090/_framework/Nori.Core.8mq2qhgmy9.wasm' for Nori.Core.8mq2qhgmy9.wasm failed 404 File not found @ http://localhost:8090/_framework/blazor.webassembly.js:0
+[      79ms] download 'http://localhost:8090/_framework/Nori.Core.8mq2qhgmy9.wasm' for Nori.Core.8mq2qhgmy9.wasm failed 404 File not found
+[      79ms] download 'http://localhost:8090/_framework/Nori.Core.8mq2qhgmy9.wasm' for Nori.Core.8mq2qhgmy9.wasm failed 404 File not found
+[   49235ms] [WARNING] Instance range (first: 0, count: 88) requires a larger buffer (1760) than the bound buffer size (1056) of the vertex buffer at slot 0 with stride 20.
+ - While encoding [RenderPassEncoder "clear"].Draw(6, 88, 0, 0).
+ - While finishing [CommandEncoder (unlabeled)].
+ @ http://localhost:8090/:0
+[   49235ms] [WARNING] [Invalid CommandBuffer] is invalid.
+ - While calling [Queue].Submit([[Invalid CommandBuffer]])
+ @ http://localhost:8090/:0
+[   49237ms] [WARNING] Instance range (first: 0, count: 88) requires a larger buffer (1760) than the bound buffer size (1056) of the vertex buffer at slot 0 with stride 20.
+ - While encoding [RenderPassEncoder "clear"].Draw(6, 88, 0, 0).
+ - While finishing [CommandEncoder (unlabeled)].
+ @ http://localhost:8090/:0
+[   49237ms] [WARNING] [Invalid CommandBuffer] is invalid.
+ - While calling [Queue].Submit([[Invalid CommandBuffer]])
+ @ http://localhost:8090/:0

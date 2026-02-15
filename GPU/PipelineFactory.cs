@@ -105,8 +105,10 @@ public unsafe class PipelineFactory : IDisposable {
       string[] names = asm.GetManifestResourceNames ();
       foreach (string name in names) {
          if (!name.EndsWith (".wgsl")) continue;
-         // Resource name format: Nori.GPU.Shaders.Line2D.wgsl (or similar)
-         string key = Path.GetFileNameWithoutExtension (name);
+         // Resource name format: Nori.GPU.Shaders.Line2D.wgsl → extract "Line2D"
+         string key = name[..^5]; // strip ".wgsl"
+         int dot = key.LastIndexOf ('.');
+         if (dot >= 0) key = key[(dot + 1)..];
          using Stream stream = asm.GetManifestResourceStream (name)!;
          using StreamReader reader = new (stream);
          string source = reader.ReadToEnd ();

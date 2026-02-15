@@ -1,0 +1,2 @@
+[     259ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://127.0.0.1:50006/_content/Nori.Platform.Web/nori-platform.js:0
+[     269ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://127.0.0.1:50006/favicon.ico:0

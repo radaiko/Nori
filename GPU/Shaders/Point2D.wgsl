@@ -25,10 +25,10 @@ struct VertexOutput {
     @location(0) st_coord: vec2<f32>,
 };
 
-const QUAD_IDX = array<u32, 6>(0u, 1u, 2u, 2u, 1u, 3u);
+var<private> QUAD_IDX: array<u32, 6> = array<u32, 6>(0u, 1u, 2u, 2u, 1u, 3u);
 
 // Corner offsets: (+,+), (+,-), (-,+), (-,-)
-const CORNER_SIGNS = array<vec2<f32>, 4>(
+var<private> CORNER_SIGNS: array<vec2<f32>, 4> = array<vec2<f32>, 4>(
     vec2<f32>(1.0, 1.0),
     vec2<f32>(1.0, -1.0),
     vec2<f32>(-1.0, 1.0),

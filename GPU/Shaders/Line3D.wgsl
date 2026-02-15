@@ -26,7 +26,7 @@ struct VertexOutput {
     @location(0) dist: f32,
 };
 
-const QUAD_IDX = array<u32, 6>(0u, 1u, 2u, 2u, 1u, 3u);
+var<private> QUAD_IDX: array<u32, 6> = array<u32, 6>(0u, 1u, 2u, 2u, 1u, 3u);
 
 @vertex
 fn vs_main(@builtin(vertex_index) vid: u32, input: VertexInput) -> VertexOutput {
