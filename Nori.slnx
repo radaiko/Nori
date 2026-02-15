@@ -1,6 +1,8 @@
 <Solution>
   <Folder Name="/Demos/">
     <Project Path="Demos/Shared/Demos.Shared.csproj" />
+    <Project Path="Demos/Single/sidecar/Sidecar.csproj" />
+    <Project Path="Demos/Networked/Server/Server.csproj" />
   </Folder>
   <Folder Name="/Test/">
     <Project Path="Test/Nori.Test.csproj" />
