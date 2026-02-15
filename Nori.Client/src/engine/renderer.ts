@@ -655,7 +655,7 @@ export class Renderer {
     uniformData.set(projMatrix, 0);
     uniformData[16] = vpScale[0];
     uniformData[17] = vpScale[1];
-    uniformData[18] = 1;  // wire edge line width (matches WPF BlackLine)
+    uniformData[18] = 2 * (globalThis.devicePixelRatio ?? 1);  // WPF default is 2 logical px * DPIScale
     uniformData[19] = 0;
     uniformData.set(blackColor, 20);
 
