@@ -255,7 +255,7 @@ export class Renderer {
       const cadPipeline = this.pipelines.get(Pipeline.CADGooch);
       for (const prim of primitives) {
         if (prim.type === PrimType.Mesh3D) {
-          this.drawMesh3D(msaaPass, cadPipeline, prim, projMatrix, normalMatrix, primColor(prim), device);
+          this.drawMesh3D(msaaPass, cadPipeline, prim, projMatrix, normalMatrix, primColor(prim), device, [vpScaleX, vpScaleY]);
         }
       }
       msaaPass.end();
@@ -315,29 +315,7 @@ export class Renderer {
       mainPass.end();
     }
 
-    // --- Pass 3: Edge composite overlay (mesh scenes only) ---
-    if (has3D && hasGBufferPipeline && this.pipelines.has(Pipeline.EdgeComposite)) {
-      // Ensure edge bind group is up to date
-      if (!this.edgeBindGroup || this.edgeTexW !== w || this.edgeTexH !== h) {
-        this.rebuildEdgeBindGroup();
-      }
-
-      const edgePass = encoder.beginRenderPass({
-        label: 'edge-pass',
-        colorAttachments: [{
-          view: colorView,
-          loadOp: 'load',   // preserve existing scene
-          storeOp: 'store',
-        }],
-        // No depth-stencil — pure overlay
-      });
-
-      edgePass.setPipeline(this.pipelines.get(Pipeline.EdgeComposite));
-      edgePass.setBindGroup(0, this.edgeBindGroup!);
-      edgePass.draw(3);  // full-screen triangle
-
-      edgePass.end();
-    }
+    // Edge composite pass disabled — wireframe lines drawn in MSAA pass match WPF approach
 
     device.queue.submit([encoder.finish()]);
   }
@@ -677,7 +655,7 @@ export class Renderer {
     uniformData.set(projMatrix, 0);
     uniformData[16] = vpScale[0];
     uniformData[17] = vpScale[1];
-    uniformData[18] = 1.5;  // wire edge line width (matches WPF BlackLine)
+    uniformData[18] = 1;  // wire edge line width (matches WPF BlackLine)
     uniformData[19] = 0;
     uniformData.set(blackColor, 20);
 

@@ -4,6 +4,7 @@
 // Import shader sources as raw strings. These are loaded at build time
 // or fetched at runtime. For now we embed them inline via a loader map.
 import { shaderSources } from './shader-loader.js';
+import { MSAA_SAMPLES } from './gpu-device.js';
 
 // ---------------------------------------------------------------------------
 // EPipeline enum -- matches the C# EPipeline exactly
@@ -269,7 +270,7 @@ export class PipelineFactory {
 
     const line3DLayout = [instanceLayout3DLine()];
     this.build(device, format, Pipeline.Line3D, 'Line3D', line3DLayout, { blend: true, depth: true });
-    this.build(device, format, Pipeline.BlackLine, 'Line3D', line3DLayout, { blend: true, depth: true });
+    this.build(device, format, Pipeline.BlackLine, 'Line3D', line3DLayout, { blend: true, depth: true, msaa: true });
     this.build(device, format, Pipeline.GlassLine, 'GlassLine', line3DLayout, { blend: true, depth: true });
 
     const pt2DLayout = [instanceLayout2DPoint()];
@@ -316,8 +317,8 @@ export class PipelineFactory {
     // CAD pipeline: G-Buffer writes to rgba16float (not canvas format)
     this.buildGBuffer(device, Pipeline.GBufferNormal, 'GBufferNormal', facet3DLayout);
 
-    // CAD pipeline: Gooch shading (same build as Phong — canvas format, depth enabled)
-    this.build(device, format, Pipeline.CADGooch, 'CADGooch', facet3DLayout, { depth: true });
+    // CAD pipeline: Gooch shading (MSAA for smooth edges)
+    this.build(device, format, Pipeline.CADGooch, 'CADGooch', facet3DLayout, { depth: true, msaa: true });
 
     // CAD pipeline: Edge composite (full-screen post-process, no vertex buffers)
     this.buildPostProcess(device, format, Pipeline.EdgeComposite, 'EdgeComposite');
@@ -329,7 +330,7 @@ export class PipelineFactory {
     id: Pipeline,
     shaderName: string,
     layouts: GPUVertexBufferLayout[],
-    opts: { blend?: boolean; depth?: boolean; textured?: boolean },
+    opts: { blend?: boolean; depth?: boolean; textured?: boolean; msaa?: boolean },
   ): void {
     const shader = this.shaderModules.get(shaderName);
     if (!shader) {
@@ -380,6 +381,7 @@ export class PipelineFactory {
         cullMode: 'none',
       },
       depthStencil,
+      ...(opts.msaa ? { multisample: { count: MSAA_SAMPLES } } : {}),
     });
     this.pipelines.set(id, pipeline);
   }
@@ -425,6 +427,7 @@ export class PipelineFactory {
         depthWriteEnabled: true,
         depthCompare: 'less-equal',
       },
+      multisample: { count: MSAA_SAMPLES },
     });
     this.pipelines.set(id, pipeline);
   }
