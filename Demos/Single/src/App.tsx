@@ -1,6 +1,23 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { NoriRenderer } from '@nori/renderer';
 
+const DEMOS = [
+  { id: 'dwg', label: 'Drawing Entities' },
+  { id: 'linefont', label: 'Line Font' },
+  { id: 'convexhull', label: 'Convex Hull' },
+  { id: 'boolean', label: 'Polygon Boolean' },
+  { id: 'leaf', label: 'Leaf Fill' },
+  { id: 'mesh', label: '3D Mesh' },
+  { id: 'tess', label: 'Tessellation' },
+  { id: 'mes', label: 'Min Enclosing Sphere' },
+  { id: 'aabbtree', label: 'AABB Tree' },
+  { id: 't3x', label: 'T3X Viewer' },
+  { id: 'stp', label: 'STEP Viewer' },
+  { id: 'obb', label: 'OBB Builder' },
+  { id: 'meshslice', label: 'Mesh Slicing' },
+  { id: 'robot', label: 'Robot' },
+];
+
 interface EntityInfo {
   id: number;
   position: { x: number; y: number; z: number };
@@ -12,6 +29,7 @@ export default function App() {
   const [connected, setConnected] = useState(false);
   const [fps, setFps] = useState(0);
   const [pickedEntity, setPickedEntity] = useState<EntityInfo | null>(null);
+  const [selectedDemo, setSelectedDemo] = useState('dwg');
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -31,6 +49,7 @@ export default function App() {
     renderer.onConnected = () => setConnected(true);
     renderer.onDisconnected = () => setConnected(false);
     renderer.onFps = setFps;
+    renderer.onSceneLoaded = () => renderer.resetView();
     renderer.onEntityPicked = (entityId, position) => {
       if (entityId >= 0) {
         setPickedEntity({ id: entityId, position });
@@ -40,7 +59,7 @@ export default function App() {
     };
 
     rendererRef.current = renderer;
-    renderer.connect();
+    renderer.connect().catch(err => console.error('Failed to connect:', err));
 
     const handleResize = () => {
       updateSize();
@@ -55,6 +74,12 @@ export default function App() {
 
   const handleResetView = useCallback(() => {
     rendererRef.current?.resetView();
+  }, []);
+
+  const handleDemoChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    const demoId = e.target.value;
+    setSelectedDemo(demoId);
+    rendererRef.current?.sendCommand('demo', demoId);
   }, []);
 
   return (
@@ -75,6 +100,10 @@ export default function App() {
           display: 'inline-block',
         }} />
         <span>{connected ? 'Connected' : 'Disconnected'}</span>
+
+        <select value={selectedDemo} onChange={handleDemoChange} style={selectStyle}>
+          {DEMOS.map(d => <option key={d.id} value={d.id}>{d.label}</option>)}
+        </select>
 
         <div style={{ flex: 1 }} />
 
@@ -116,4 +145,10 @@ const btnStyle: React.CSSProperties = {
   padding: '4px 12px', border: '1px solid #555', borderRadius: 4,
   background: '#2a2a3e', color: '#ccc', cursor: 'pointer',
   fontSize: 12,
+};
+
+const selectStyle: React.CSSProperties = {
+  padding: '4px 8px', border: '1px solid #555', borderRadius: 4,
+  background: '#2a2a3e', color: '#ccc', cursor: 'pointer',
+  fontSize: 12, marginLeft: 8,
 };
