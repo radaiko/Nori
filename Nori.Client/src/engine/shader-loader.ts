@@ -949,8 +949,9 @@ struct Uniforms {
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
 // Gooch bias colors (added to scaled object color)
-const COOL_BIAS = vec3<f32>(0.03, 0.03, 0.1);  // subtle blue in shadows
-const WARM_BIAS = vec3<f32>(0.1, 0.06, 0.0);    // subtle warm in highlights
+const COOL_BIAS = vec3<f32>(0.02, 0.02, 0.08);  // subtle blue in shadows
+const WARM_BIAS = vec3<f32>(0.06, 0.03, 0.0);   // subtle warm in highlights
+const AMBIENT = vec3<f32>(0.08, 0.08, 0.08);    // ambient floor
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -974,13 +975,13 @@ fn vs_main(input: VertexInput) -> VertexOutput {
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let light_dir = normalize(uniforms.normal_xfm[3].xyz);
     let n = normalize(in.normal);
-    let NdotL = dot(light_dir, n);
-    let t = (1.0 + NdotL) * 0.5; // remap [-1,1] to [0,1]
+    let NdotL = abs(dot(light_dir, n)); // two-sided lighting (matches Phong)
+    let t = NdotL;
 
-    // Gooch: object color preserved, with cool/warm bias
-    let k_cool = COOL_BIAS + 0.35 * uniforms.draw_color.rgb;
-    let k_warm = WARM_BIAS + 0.8 * uniforms.draw_color.rgb;
-    let color = mix(k_cool, k_warm, t);
+    // Gooch: object color preserved, with subtle cool/warm bias
+    let k_cool = COOL_BIAS + 0.45 * uniforms.draw_color.rgb;
+    let k_warm = WARM_BIAS + 0.85 * uniforms.draw_color.rgb;
+    let color = mix(k_cool, k_warm, t) + AMBIENT;
     return vec4<f32>(color, uniforms.draw_color.a);
 }
 `;
@@ -1051,8 +1052,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let depth_edge = abs(sx_d) + abs(sy_d);
 
     // Combine edge strengths with thresholds, masked by geometry
-    let n_strength = smoothstep(uniforms.edge_threshold_normal * 0.5, uniforms.edge_threshold_normal, normal_edge);
-    let d_strength = smoothstep(uniforms.edge_threshold_depth * 0.5, uniforms.edge_threshold_depth, depth_edge);
+    // Use tight smoothstep for thin, crisp edges (narrow transition band)
+    let n_strength = smoothstep(uniforms.edge_threshold_normal * 0.85, uniforms.edge_threshold_normal, normal_edge);
+    let d_strength = smoothstep(uniforms.edge_threshold_depth * 0.85, uniforms.edge_threshold_depth, depth_edge);
     let alpha = max(n_strength, d_strength) * is_geom;
 
     return vec4<f32>(0.0, 0.0, 0.0, alpha); // black edges, blended over scene

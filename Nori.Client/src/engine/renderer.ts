@@ -142,8 +142,8 @@ export class Renderer {
     const postData = new Float32Array(UNIFORM_SIZE_POST / 4);
     postData[0] = 1.0 / w;   // texel_size.x
     postData[1] = 1.0 / h;   // texel_size.y
-    postData[2] = 0.4;       // edge_threshold_normal
-    postData[3] = 0.05;      // edge_threshold_depth
+    postData[2] = 0.7;       // edge_threshold_normal
+    postData[3] = 0.08;      // edge_threshold_depth
     this.edgeUniformBuf = this.buffers.createUniformBuffer(UNIFORM_SIZE_POST, 'edge-uniform');
     device.queue.writeBuffer(this.edgeUniformBuf, 0, postData.buffer, postData.byteOffset, postData.byteLength);
 
