@@ -24,6 +24,7 @@ public static class DemoScenes {
       "stp" => STPScene (),
       "obb" => BuildOBBDemo (),
       "meshslice" => IntMeshPlane (),
+      "robot" => RobotDemo (),
       _ => DwgDemo (),
    };
 
@@ -833,6 +834,65 @@ public static class DemoScenes {
          SceneType = ESceneType.Scene3D,
          BgColor = [32, 64, 96, 255],
          Bounds = Bounds3D (bound),
+         Transforms = IdentityTransform (),
+         Entities = entities.ToArray (),
+      };
+   }
+
+   // ═══════════════════════════════════════════════════════════════════════════════
+   // 7. RobotDemo
+   // ═══════════════════════════════════════════════════════════════════════════════
+
+   /// <summary>Robot mechanism demo — static pose with all joints at default angles</summary>
+   static SceneInitMsg RobotDemo () {
+      Mechanism mech = Mechanism.Load ($"{Lib.DevRoot}/Wad/FanucX/mechanism.curl");
+
+      List<EntityDataMsg> entities = [];
+      int entId = 0;
+
+      // Walk mechanism tree and capture each node's mesh
+      foreach (Mechanism node in mech.EnumTree ()) {
+         if (node.Mesh == null) continue;
+         Mesh3 mesh = node.Mesh;
+         Matrix3 xfm = node.Xfm;
+         Color4 color = node.Color;
+
+         // Transform mesh vertices (position + normal) by accumulated transform
+         ImmutableArray<Mesh3.Node> verts = mesh.Vertex;
+         float[] data = new float[verts.Length * 6];
+         for (int v = 0; v < verts.Length; v++) {
+            Mesh3.Node nd = verts[v];
+            Point3f pos = nd.Pos * xfm;
+            Vector3 norm = ((Vector3)nd.Vec) * xfm;
+            int off = v * 6;
+            data[off] = pos.X; data[off + 1] = pos.Y; data[off + 2] = pos.Z;
+            data[off + 3] = (float)norm.X; data[off + 4] = (float)norm.Y; data[off + 5] = (float)norm.Z;
+         }
+
+         RenderPrimitive meshPrim = new () {
+            Type = EPrimType.Mesh3D,
+            Data = data,
+            Indices = mesh.Triangle.ToArray (),
+            WireIndices = mesh.Wire.Length > 0 ? mesh.Wire.ToArray () : [],
+            Color = [color.R, color.G, color.B, color.A],
+            ShadeMode = 1, // Phong
+         };
+         entities.Add (new EntityDataMsg { Id = entId++, Primitives = [meshPrim] });
+      }
+
+      // Axis lines (white) — from origin along each axis
+      List<Point3> axisLines = [
+         new (0, 0, 0), new (100, 0, 0),
+         new (0, 0, 0), new (0, 100, 0),
+         new (0, 0, 0), new (0, 0, 100),
+      ];
+      RenderPrimitive axisPrim = RenderCapture.CaptureLines3 (axisLines, [255, 255, 255, 255]);
+      entities.Add (new EntityDataMsg { Id = entId++, Primitives = [axisPrim] });
+
+      return new SceneInitMsg {
+         SceneType = ESceneType.Scene3D,
+         BgColor = [96, 96, 96, 255],
+         Bounds = [-1200, -1200, 0, 1200, 1200, 1500],
          Transforms = IdentityTransform (),
          Entities = entities.ToArray (),
       };
