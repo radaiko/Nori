@@ -36,7 +36,7 @@ export class Renderer {
   private pipelines: PipelineFactory;
   private buffers: BufferManager;
   private scene: ClientScene;
-  private animFrameId: number = 0;
+  private running: boolean = false;
   private dirty: boolean = true;
   private lastCanvasW: number = 0;
   private lastCanvasH: number = 0;
@@ -63,10 +63,12 @@ export class Renderer {
     this.scene = scene;
   }
 
-  /** Start the render loop */
+  /** Start the render loop (uncapped — renders as fast as GPU allows) */
   start(): void {
     this.lastFpsTime = performance.now();
+    this.running = true;
     const loop = () => {
+      if (!this.running) return;
       this.checkResize();
       if (this.dirty) {
         this.renderFrame();
@@ -80,15 +82,14 @@ export class Renderer {
         this.frameCount = 0;
         this.lastFpsTime = now;
       }
-      this.animFrameId = requestAnimationFrame(loop);
+      setTimeout(loop, 0);
     };
-    this.animFrameId = requestAnimationFrame(loop);
+    setTimeout(loop, 0);
   }
 
   /** Stop the render loop */
   stop(): void {
-    cancelAnimationFrame(this.animFrameId);
-    this.animFrameId = 0;
+    this.running = false;
   }
 
   /** Mark the scene as needing a redraw */

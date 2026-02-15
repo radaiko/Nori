@@ -196,9 +196,9 @@ export class InputHandler {
     this.lastY = e.clientY;
 
     if (this.dragButton === 0 && this.scene.sceneType === '3d') {
-      // Left drag in 3D → orbit (turntable rotation)
+      // Left drag in 3D → orbit (turntable rotation, matches WPF SceneRotator)
       this.scene.zRot += dx * 0.5;
-      this.scene.xRot = clamp(this.scene.xRot - dy * 0.5, -90, 90);
+      this.scene.xRot += dy * 0.5;
     } else if (this.dragButton === 0 && this.scene.sceneType === '2d') {
       // Left drag in 2D → pan
       this.applyPanDelta(dx, dy);
@@ -263,7 +263,7 @@ export class InputHandler {
 
       if (this.scene.sceneType === '3d') {
         this.scene.zRot += dx * 0.5;
-        this.scene.xRot = clamp(this.scene.xRot - dy * 0.5, -90, 90);
+        this.scene.xRot += dy * 0.5;
       } else {
         this.applyPanDelta(dx, dy);
       }
