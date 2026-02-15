@@ -52,6 +52,11 @@ export class Renderer {
   private edgeTexW: number = 0;
   private edgeTexH: number = 0;
 
+  // DashLine2D linetype texture resources
+  private ltypeTexture: GPUTexture | null = null;
+  private ltypeTextureView: GPUTextureView | null = null;
+  private ltypeSampler: GPUSampler | null = null;
+
   // Connection for per-frame message flushing
   private connection: NoriConnection | null = null;
 
@@ -65,6 +70,63 @@ export class Renderer {
     this.pipelines = pipelines;
     this.buffers = new BufferManager(gpu.device);
     this.scene = scene;
+    this.createLinetypeTexture(gpu.device);
+  }
+
+  /** Create a 256×16 linetype pattern texture for dashed line rendering */
+  private createLinetypeTexture(device: GPUDevice): void {
+    const W = 256, H = 16;
+    const data = new Uint8Array(W * H);
+    // ELineType: 0=Continuous, 1=Dot, 2=Dash, 3=DashDot, 4=DashDotDot,
+    //            5=Center, 6=Border, 7=Hidden, 8=Dash2, 9=Phantom
+    const patterns: number[][] = [
+      [],                                            // 0: Continuous (all solid)
+      [4, 4],                                        // 1: Dot
+      [24, 12],                                      // 2: Dash
+      [24, 8, 4, 8],                                 // 3: DashDot
+      [24, 6, 4, 6, 4, 6],                           // 4: DashDotDot
+      [32, 8, 8, 8],                                 // 5: Center
+      [24, 6, 4, 6, 4, 6],                           // 6: Border
+      [12, 8],                                       // 7: Hidden
+      [16, 8],                                       // 8: Dash2
+      [32, 6, 4, 6, 4, 6],                           // 9: Phantom
+    ];
+    for (let row = 0; row < H; row++) {
+      const pat = row < patterns.length ? patterns[row] : [];
+      if (pat.length === 0) {
+        // Solid line — fill entire row with 255
+        for (let x = 0; x < W; x++) data[row * W + x] = 255;
+      } else {
+        // Generate repeating dash pattern
+        const total = pat.reduce((a, b) => a + b, 0);
+        for (let x = 0; x < W; x++) {
+          const t = (x / W) * total;
+          let acc = 0;
+          let visible = true;
+          for (let i = 0; i < pat.length; i++) {
+            acc += pat[i];
+            if (t < acc) { visible = i % 2 === 0; break; }
+          }
+          data[row * W + x] = visible ? 255 : 0;
+        }
+      }
+    }
+    this.ltypeTexture = device.createTexture({
+      size: { width: W, height: H },
+      format: 'r8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+      label: 'linetype-texture',
+    });
+    device.queue.writeTexture(
+      { texture: this.ltypeTexture },
+      data, { bytesPerRow: W }, { width: W, height: H },
+    );
+    this.ltypeTextureView = this.ltypeTexture.createView({ label: 'linetype-view' });
+    this.ltypeSampler = device.createSampler({
+      magFilter: 'linear', minFilter: 'linear',
+      addressModeU: 'repeat', addressModeV: 'clamp-to-edge',
+      label: 'linetype-sampler',
+    });
   }
 
   /** Set the connection for per-frame message batching */
@@ -376,6 +438,9 @@ export class Renderer {
       case Pipeline.Bezier2D:
         this.drawInstanced2DLine(pass, pipeline, prim, projMatrix, vpScaleX, vpScaleY, color, device);
         break;
+      case Pipeline.DashLine2D:
+        this.drawInstanced2DDashLine(pass, pipeline, prim, projMatrix, vpScaleX, vpScaleY, color, device);
+        break;
       case Pipeline.Line3D:
       case Pipeline.BlackLine:
       case Pipeline.GlassLine:
@@ -446,6 +511,54 @@ export class Renderer {
     pass.draw(6, instanceCount);   // 6 vertices per quad instance
 
     // Schedule cleanup (buffers live until end of frame submission)
+    this.deferDestroy(uniformBuf, vertexBuf);
+  }
+
+  private drawInstanced2DDashLine(
+    pass: GPURenderPassEncoder,
+    pipeline: GPURenderPipeline,
+    prim: RenderPrimitive,
+    projMatrix: Float32Array,
+    vpScaleX: number, vpScaleY: number,
+    color: Float32Array,
+    device: GPUDevice,
+  ): void {
+    if (!this.ltypeTextureView || !this.ltypeSampler) return;
+
+    // DashLine2D uniform: mat4x4 xfm + vec2 vp_scale + f32 lineWidth + f32 ltScale
+    //   + vec4 color + f32 lineType + pad*3 = 112 bytes
+    const uniformData = new Float32Array(UNIFORM_SIZE_DASHLINE / 4);
+    uniformData.set(projMatrix, 0);           // offset 0: mat4x4 (16 floats)
+    uniformData[16] = vpScaleX;               // offset 64: vp_scale.x
+    uniformData[17] = vpScaleY;               // offset 68: vp_scale.y
+    uniformData[18] = Math.max(prim.lineWidth, 1); // offset 72: line_width
+    uniformData[19] = Math.max(prim.ltScale || 20, 1); // offset 76: lt_scale
+    uniformData.set(color, 20);               // offset 80: draw_color (4 floats)
+    // lineType is the row in the texture (0-9), normalized to [0,1] for sampling
+    uniformData[24] = ((prim.lineType || 0) + 0.5) / 16; // offset 96: line_type (normalized Y)
+    uniformData[25] = 0;                      // pad
+    uniformData[26] = 0;                      // pad
+    uniformData[27] = 0;                      // pad
+
+    const instanceCount = prim.data.length / 4;
+    if (instanceCount < 1) return;
+
+    const uniformBuf = this.createTempUniform(device, uniformData);
+    const vertexBuf = this.buffers.createVertexBuffer(prim.data, 'dashline2d-instances');
+    const bindGroup = device.createBindGroup({
+      layout: this.pipelines.texturedLayout,
+      entries: [
+        { binding: 0, resource: { buffer: uniformBuf } },
+        { binding: 1, resource: this.ltypeTextureView },
+        { binding: 2, resource: this.ltypeSampler },
+      ],
+    });
+
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.setVertexBuffer(0, vertexBuf);
+    pass.draw(6, instanceCount);
+
     this.deferDestroy(uniformBuf, vertexBuf);
   }
 

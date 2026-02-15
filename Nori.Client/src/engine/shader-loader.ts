@@ -260,7 +260,9 @@ fn vs_main(@builtin(vertex_index) vid: u32, input: VertexInput) -> VertexOutput 
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let d = abs(in.dist) / uniforms.line_width;
     let a1 = exp2(-2.0 * d * d);
-    let a2 = textureSample(ltype_texture, ltype_sampler, vec2<f32>(in.tex_coord, uniforms.line_type)).r;
+    let row = i32(uniforms.line_type * 16.0);
+    let col = i32(fract(in.tex_coord) * 256.0) % 256;
+    let a2 = textureLoad(ltype_texture, vec2<i32>(col, row), 0).r;
     return vec4<f32>(uniforms.draw_color.rgb, a1 * a2);
 }
 `;

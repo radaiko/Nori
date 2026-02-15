@@ -12,6 +12,18 @@ public class RenderCapture {
    /// <summary>Capture all renderable data from a 2D scene backed by a Dwg2</summary>
    public static EntityDataMsg[] CaptureDwg2 (Dwg2 dwg) {
       List<EntityDataMsg> entities = new ();
+
+      // First pass: fill interiors of closed polys in a single stencil pass
+      // (matches WPF DwgFillVN — shared hub, XOR stencil creates correct inside/outside)
+      var closedPolys = dwg.Ents.OfType<E2Poly> ().Where (e => e.Poly.IsClosed).Select (e => e.Poly).ToList ();
+      if (closedPolys.Count > 0) {
+         Bound2 bound = dwg.Bound.InflatedF (1.01);
+         var fillPrim = CaptureCombinedFill (closedPolys, [240, 240, 248, 255], bound);
+         if (fillPrim != null)
+            entities.Add (new EntityDataMsg { Id = -1, Primitives = [fillPrim] });
+      }
+
+      // Second pass: entity outlines and other geometry
       for (int i = 0; i < dwg.Ents.Count; i++) {
          Ent2 ent = dwg.Ents[i];
          EntityDataMsg? msg = CaptureEntity2 (ent, i);
@@ -61,24 +73,19 @@ public class RenderCapture {
    }
 
    // Poly capture ----------------------------------------------------------------
-   /// <summary>Captures a Poly as lines and bezier primitives</summary>
+   /// <summary>Captures a Poly as Lines2D (arcs are discretized to line segments)</summary>
    static void CapturePoly (Poly poly, byte[] rgba, ELineType lineType, List<RenderPrimitive> prims) {
       if (poly.Count == 0) return;
       List<float> lineData = new ();
-      List<float> bezierData = new ();
-      foreach (Seg seg in poly.Segs) {
-         if (seg.IsArc) {
-            List<Vec2F> bezPts = new ();
-            seg.ToBeziers (bezPts);
-            foreach (Vec2F pt in bezPts) {
-               bezierData.Add (pt.X);
-               bezierData.Add (pt.Y);
-            }
-         } else {
-            Point2 a = seg.A, b = seg.B;
-            lineData.Add ((float)a.X); lineData.Add ((float)a.Y);
-            lineData.Add ((float)b.X); lineData.Add ((float)b.Y);
-         }
+      List<Point2> pts = new ();
+      poly.Discretize (pts, 0.1, 0.5);
+      for (int i = 0; i < pts.Count - 1; i++) {
+         lineData.Add ((float)pts[i].X); lineData.Add ((float)pts[i].Y);
+         lineData.Add ((float)pts[i + 1].X); lineData.Add ((float)pts[i + 1].Y);
+      }
+      if (poly.IsClosed && pts.Count > 1) {
+         lineData.Add ((float)pts[^1].X); lineData.Add ((float)pts[^1].Y);
+         lineData.Add ((float)pts[0].X); lineData.Add ((float)pts[0].Y);
       }
       if (lineData.Count > 0)
          prims.Add (new RenderPrimitive {
@@ -86,12 +93,40 @@ public class RenderCapture {
             Color = rgba, LineWidth = 2f,
             LineType = (byte)lineType,
          });
-      if (bezierData.Count > 0)
-         prims.Add (new RenderPrimitive {
-            Type = EPrimType.Beziers2D, Data = bezierData.ToArray (),
-            Color = rgba, LineWidth = 2f,
-            LineType = (byte)lineType,
-         });
+   }
+
+   // Combined fill capture (for closed polys) ----------------------------------------
+   /// <summary>Combines all closed polys into a single Fill2D with shared hub (matches WPF DwgFillVN)</summary>
+   static RenderPrimitive? CaptureCombinedFill (List<Poly> polys, byte[] rgba, Bound2 bound) {
+      List<float> fillData = [];
+      List<int> indices = [];
+      // Index 0 = shared hub vertex at bounding box midpoint
+      Vec2F hub = bound.Midpoint;
+      fillData.Add (hub.X); fillData.Add (hub.Y);
+
+      foreach (var poly in polys) {
+         List<Point2> pts = new ();
+         poly.Discretize (pts, 0.05, Lib.FineTessAngle);
+         if (pts.Count < 3) continue;
+         indices.Add (0); // hub (start new fan)
+         int idx0 = fillData.Count / 2;
+         foreach (Point2 pt in pts) {
+            indices.Add (fillData.Count / 2);
+            fillData.Add ((float)pt.X); fillData.Add ((float)pt.Y);
+         }
+         indices.Add (idx0); // close back to first point
+         indices.Add (-1);   // delimiter
+      }
+
+      if (fillData.Count < 6) return null; // need at least hub + 2 points
+      return new RenderPrimitive {
+         Type = EPrimType.Fill2D,
+         Data = fillData.ToArray (),
+         Indices = indices.ToArray (),
+         Color = rgba,
+         ZLevel = -10,
+         BoundData = [(float)bound.X.Min, (float)bound.Y.Min, (float)bound.X.Max, (float)bound.Y.Max],
+      };
    }
 
    // Point capture ---------------------------------------------------------------
@@ -141,24 +176,19 @@ public class RenderCapture {
    }
 
    // Solid capture ---------------------------------------------------------------
-   /// <summary>Captures an E2Solid as quads (4 points, with the DXF corner swap)</summary>
+   /// <summary>Captures an E2Solid as two triangles (DXF corner swap applied)</summary>
    static void CaptureSolid (E2Solid es, byte[] rgba, List<RenderPrimitive> prims) {
       IReadOnlyList<Point2> pts = es.Pts;
       if (pts.Count < 3) return;
-      // DXF solids store 4 corners with 3rd and 4th swapped; the VNode does the same swap
-      List<float> data = new ();
-      data.Add ((float)pts[0].X); data.Add ((float)pts[0].Y);
-      data.Add ((float)pts[1].X); data.Add ((float)pts[1].Y);
-      if (pts.Count >= 4) {
-         // Swap 3rd and 4th (same as E2SolidVN)
-         data.Add ((float)pts[3].X); data.Add ((float)pts[3].Y);
-         data.Add ((float)pts[2].X); data.Add ((float)pts[2].Y);
-      } else {
-         data.Add ((float)pts[2].X); data.Add ((float)pts[2].Y);
-         data.Add ((float)pts[2].X); data.Add ((float)pts[2].Y);
-      }
+      // DXF solids store 4 corners with 3rd and 4th swapped
+      Point2 p0 = pts[0], p1 = pts[1];
+      Point2 p2 = pts.Count >= 4 ? pts[3] : pts[2]; // swapped
+      Point2 p3 = pts.Count >= 4 ? pts[2] : pts[2]; // swapped
+      // Emit as two triangles: (p0,p1,p2) and (p2,p1,p3)
+      List<float> data = [(float)p0.X, (float)p0.Y, (float)p1.X, (float)p1.Y, (float)p2.X, (float)p2.Y,
+                          (float)p2.X, (float)p2.Y, (float)p1.X, (float)p1.Y, (float)p3.X, (float)p3.Y];
       prims.Add (new RenderPrimitive {
-         Type = EPrimType.Quads2D, Data = data.ToArray (),
+         Type = EPrimType.Triangles2D, Data = data.ToArray (),
          Color = rgba,
       });
    }
@@ -183,7 +213,7 @@ public class RenderCapture {
    }
 
    // Bendline capture ------------------------------------------------------------
-   /// <summary>Captures an E2Bendline as line pairs</summary>
+   /// <summary>Captures an E2Bendline as line pairs plus angle text annotations</summary>
    static void CaptureBendline (E2Bendline eb, byte[] rgba, List<RenderPrimitive> prims) {
       ImmutableArray<Point2> pts = eb.Pts;
       if (pts.Length < 2) return;
@@ -201,6 +231,29 @@ public class RenderCapture {
             Color = green, LineWidth = 2f,
             LineType = (byte)lt,
          });
+
+      // Angle text at midpoint of each bendline segment (matches WPF E2BendlineVN.DrawText)
+      string text = Math.Round (eb.Angle.R2D (), 2).ToString (System.Globalization.CultureInfo.InvariantCulture);
+      if (text == "-0") text = "0";
+      text = eb.Angle > 0 ? $"+{text}\u00b0" : $"{text}\u00b0";
+      List<Poly> textPolys = new ();
+      for (int i = 0; i < pts.Length; i += 2) {
+         Point2 midpt = pts[i].Midpoint (pts[i + 1]);
+         LineFont.Get ("simplex").Render (text, midpt, ETextAlign.MidCenter, 0, 1, 1, 0, textPolys);
+      }
+      if (textPolys.Count > 0) {
+         List<float> textData = new ();
+         foreach (Poly poly in textPolys)
+            foreach (Seg seg in poly.Segs) {
+               textData.Add ((float)seg.A.X); textData.Add ((float)seg.A.Y);
+               textData.Add ((float)seg.B.X); textData.Add ((float)seg.B.Y);
+            }
+         if (textData.Count > 0)
+            prims.Add (new RenderPrimitive {
+               Type = EPrimType.Lines2D, Data = textData.ToArray (),
+               Color = [0, 0, 0, 255], LineWidth = 0.5f,
+            });
+      }
    }
 
    // Insert capture --------------------------------------------------------------
