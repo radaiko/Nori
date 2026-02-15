@@ -149,6 +149,11 @@ export class NoriConnection {
     ]);
   }
 
+  /** Send a command to the server */
+  sendCommand(name: string, arg: string = ''): void {
+    this.sendEnvelope(ClientMsgType.Command, [name, arg]);
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // Message handling
   // ─────────────────────────────────────────────────────────────────────────

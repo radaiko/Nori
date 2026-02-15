@@ -126,6 +126,7 @@ export class NoriRenderer {
 
     // Create renderer and start the frame loop
     this.renderer = new Renderer(this.gpuDevice, this.pipelineFactory, this._scene);
+    this.renderer.onFps = (fps) => this.events.onFps?.(fps);
     this.renderer.start();
 
     // Create input handler for mouse/touch/keyboard events
@@ -190,6 +191,11 @@ export class NoriRenderer {
   /** Send an interaction event to the server */
   sendInteraction(msg: InteractionRequestMsg): void {
     this.connection?.sendInteraction(msg);
+  }
+
+  /** Send a command to the server */
+  sendCommand(name: string, arg: string = ''): void {
+    this.connection?.sendCommand(name, arg);
   }
 
   // Camera controls -----------------------------------------------------------
