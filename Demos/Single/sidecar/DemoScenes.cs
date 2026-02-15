@@ -3,6 +3,7 @@
 // ║║║║╬║╔╣║ Static builder methods that return SceneInitMsg for each demo scene
 // ╚╩═╩═╩╝╚╝ ───────────────────────────────────────────────────────────────────────────────────────
 using System.IO;
+using System.IO.Compression;
 namespace Nori;
 
 /// <summary>Static demo scene builders — each method returns a SceneInitMsg</summary>
@@ -14,6 +15,10 @@ public static class DemoScenes {
       "convexhull" => ConvexHullDemo (),
       "boolean" => BooleanDemo (),
       "leaf" => LeafDemo (),
+      "mesh" => MeshDemo (),
+      "tess" => TessDemo (),
+      "mes" => MESDemo (),
+      "aabbtree" => AABBTreeDemo (),
       _ => DwgDemo (),
    };
 
@@ -373,6 +378,262 @@ public static class DemoScenes {
    }
 
    // ═══════════════════════════════════════════════════════════════════════════════
+   // 5a. MeshDemo
+   // ═══════════════════════════════════════════════════════════════════════════════
+
+   /// <summary>3D mesh demo — loads a Flux mesh with Phong shading</summary>
+   static SceneInitMsg MeshDemo () {
+      Mesh3 mesh = Mesh3.LoadFluxMesh ($"{Lib.DevRoot}/Wad/FanucX/Model/R.mesh");
+      Bound3 bound = mesh.Bound;
+      return new SceneInitMsg {
+         SceneType = ESceneType.Scene3D,
+         BgColor = [96, 96, 96, 255],
+         Bounds = Bounds3D (bound),
+         Transforms = IdentityTransform (),
+         Entities = [
+            new EntityDataMsg {
+               Id = 0,
+               Primitives = [RenderCapture.CaptureMesh (mesh, [255, 255, 128, 255], shadeMode: 1)],
+            },
+         ],
+      };
+   }
+
+   // ═══════════════════════════════════════════════════════════════════════════════
+   // 5b. TessDemo
+   // ═══════════════════════════════════════════════════════════════════════════════
+
+   /// <summary>Tessellation demo — thick polygon with holes via tessellation</summary>
+   static SceneInitMsg TessDemo () {
+      const double thk = 10;
+      List<Poly> polys = [
+         Poly.Parse ("M0,0H500V200Q400,300,-1H100Q0,200,1Z"),
+         Poly.Circle ((80, 80), 60),
+         Poly.Circle ((450, 70), 20),
+         Poly.Circle ((250, 120), 20),
+         Poly.Rectangle (160, 160, 180, 180),
+         Poly.Rectangle (170, 20, 280, 40),
+         Poly.Polygon ((350, 150), 30, 6),
+         Poly.Polygon ((350, 50), 20, 5),
+         Poly.Polygon ((50, 250), 20, 3),
+         Poly.Circle ((250, 250), 20),
+      ];
+
+      Mesh3 mesh;
+      try {
+         // Discretize contours
+         List<Point2> pts = []; List<int> splits = [0];
+         foreach (Poly poly in polys) {
+            poly.Discretize (pts, 0.1, 0.5411);
+            splits.Add (pts.Count);
+         }
+
+         // Tessellate the polygon into triangles
+         List<int> tries = Lib.Tessellate (pts, splits);
+
+         // Create thick plane from triangles and contours
+         List<Point3> nodes = tries.Select (n => (Point3)pts[n]).ToList ();
+         nodes.AddRange ([.. nodes.Select (x => x.WithZ (thk))]);
+         ReadOnlySpan<Point2> span = pts.AsSpan ();
+         for (int i = 1; i < splits.Count; i++) {
+            ReadOnlySpan<Point2> span2 = span[splits[i - 1]..splits[i]];
+            for (int j = 1; j <= span2.Length; j++) {
+               Point3 a = (Point3)span2[j - 1], b = (Point3)span2[j % span2.Length];
+               Point3 c = a.WithZ (thk), d = b.WithZ (thk);
+               nodes.AddRange (a, b, d, d, c, a);
+            }
+         }
+         mesh = new Mesh3Builder (nodes.AsSpan ()).Build ();
+      } catch {
+         // Tessellator not installed — fall back to displaying outer contour as lines
+         List<Point2> pts = [];
+         polys[0].Discretize (pts, 0.1, 0.5411);
+         List<Point3> linePairs = [];
+         for (int i = 0; i < pts.Count; i++) {
+            Point3 a = (Point3)pts[i], b = (Point3)pts[(i + 1) % pts.Count];
+            linePairs.Add (a); linePairs.Add (b);
+         }
+         Bound2 polyBound = polys[0].GetBound ();
+         return new SceneInitMsg {
+            SceneType = ESceneType.Scene3D,
+            BgColor = [96, 96, 96, 255],
+            Bounds = [polyBound.X.Min, polyBound.Y.Min, 0, polyBound.X.Max, polyBound.Y.Max, (float)thk],
+            Transforms = IdentityTransform (),
+            Entities = [
+               new EntityDataMsg {
+                  Id = 0,
+                  Primitives = [RenderCapture.CaptureLines3 (linePairs, [255, 255, 128, 255])],
+               },
+            ],
+         };
+      }
+
+      Bound3 bound = mesh.Bound;
+      return new SceneInitMsg {
+         SceneType = ESceneType.Scene3D,
+         BgColor = [96, 96, 96, 255],
+         Bounds = Bounds3D (bound),
+         Transforms = IdentityTransform (),
+         Entities = [
+            new EntityDataMsg {
+               Id = 0,
+               Primitives = [RenderCapture.CaptureMesh (mesh, [255, 255, 128, 255], shadeMode: 1)],
+            },
+         ],
+      };
+   }
+
+   // ═══════════════════════════════════════════════════════════════════════════════
+   // 5c. MESDemo
+   // ═══════════════════════════════════════════════════════════════════════════════
+
+   /// <summary>Minimum enclosing sphere + OBB demo</summary>
+   static SceneInitMsg MESDemo () {
+      Random R = new ();
+      Point3[] pts = [.. GeneratePoints (R, 10000, 1000)];
+
+      // Compute minimum enclosing sphere
+      MinSphere s = MinSphere.From (pts);
+
+      // Classify points: on sphere (0), inside (1), outside (2)
+      (Point3 Pt, int N)[] ptlie = [.. pts
+         .Select (pt => (pt, d: pt.DistTo (s.Center)))
+         .Select (x => (x.pt, x.d.EQ (s.Radius) ? 0 : x.d < s.Radius ? 1 : 2))];
+
+      // Sphere mesh (Glass shading)
+      Mesh3 sphereMesh = Mesh3.Sphere (s.Center, s.Radius);
+      RenderPrimitive spherePrim = RenderCapture.CaptureMesh (sphereMesh, [255, 255, 255, 255], shadeMode: 4, wireframe: false);
+
+      // Classify and capture point groups
+      List<EntityDataMsg> entities = [];
+      int entId = 0;
+
+      // Sphere entity
+      entities.Add (new EntityDataMsg { Id = entId++, Primitives = [spherePrim] });
+
+      // Point groups by classification
+      (byte[] Color, float Size)[] styles = [
+         ([0, 255, 0, 255], 8f),     // on sphere = green
+         ([255, 255, 255, 255], 3f), // inside = white
+         ([255, 0, 0, 255], 8f),     // outside = red
+      ];
+      foreach (IGrouping<int, (Point3 Pt, int N)> g in ptlie.GroupBy (x => x.N)) {
+         (byte[] color, float size) = styles[g.Key];
+         RenderPrimitive ptPrim = RenderCapture.CapturePoints3 (g.Select (x => x.Pt), color, size);
+         entities.Add (new EntityDataMsg { Id = entId++, Primitives = [ptPrim] });
+      }
+
+      // OBB wireframe
+      Point3f[] ptsF = [.. pts.Select (x => (Point3f)x)];
+      OBB obb = OBB.Build (ptsF);
+      Matrix3 obbXfm = Matrix3.To (new CoordSystem ((Point3)obb.Center, (Vector3)obb.X, (Vector3)obb.Y));
+
+      // Build OBB corners in local frame, then transform to world
+      List<Point3> corners = [];
+      (float ex, float ey, float ez) = ((float)obb.Extent.X, (float)obb.Extent.Y, (float)obb.Extent.Z);
+      for (int dx = -1; dx <= 1; dx += 2)
+         for (int dy = -1; dy <= 1; dy += 2)
+            for (int dz = -1; dz <= 1; dz += 2)
+               corners.Add (new Point3 (ex * dx, ey * dy, ez * dz) * obbXfm);
+
+      int[] edgeIdx = [0, 1, 0, 2, 0, 4, 1, 3, 1, 5, 2, 3, 2, 6, 3, 7, 4, 5, 4, 6, 5, 7, 6, 7];
+      List<Point3> obbLines = [];
+      for (int i = 0; i < edgeIdx.Length; i += 2) {
+         obbLines.Add (corners[edgeIdx[i]]);
+         obbLines.Add (corners[edgeIdx[i + 1]]);
+      }
+      RenderPrimitive obbPrim = RenderCapture.CaptureLines3 (obbLines, [255, 255, 255, 255], lineWidth: 2f);
+      entities.Add (new EntityDataMsg { Id = entId++, Primitives = [obbPrim] });
+
+      // Axis lines
+      List<Point3> axisLines = [
+         new (0, 0, 0), new (100, 0, 0),
+         new (0, 0, 0), new (0, 100, 0),
+         new (0, 0, 0), new (0, 0, 100),
+      ];
+      RenderPrimitive axisPrim = RenderCapture.CaptureLines3 (axisLines, [255, 255, 255, 255]);
+      entities.Add (new EntityDataMsg { Id = entId++, Primitives = [axisPrim] });
+
+      // Center point
+      RenderPrimitive centerPrim = RenderCapture.CapturePoints3 ([s.Center], [255, 0, 255, 255], pointSize: 6f);
+      entities.Add (new EntityDataMsg { Id = entId++, Primitives = [centerPrim] });
+
+      return new SceneInitMsg {
+         SceneType = ESceneType.Scene3D,
+         BgColor = [96, 96, 96, 255],
+         Bounds = [0, 0, 0, 1000, 1000, 1000],
+         Transforms = IdentityTransform (),
+         Entities = entities.ToArray (),
+      };
+   }
+
+   /// <summary>Generate random points within a randomly rotated cuboid</summary>
+   static IEnumerable<Point3> GeneratePoints (Random R, int count, double size) {
+      double half = size * 0.5, fsize = size * 0.01;
+      (double w, double h, double d) = (Span (), Span (), Span ());
+      Bound3 bound = new (-w, -h, -d, w, h, d);
+      Matrix3 xfm = Matrix3.Rotation (V (), R.NextDouble () * Math.PI);
+      xfm *= Matrix3.Translation (V () * half);
+      int i = 0;
+      do {
+         Point3 pt = P () * half;
+         if (!bound.Contains (pt)) continue;
+         i++;
+         yield return pt * xfm;
+      } while (i < count);
+      Point3 P () => new (R.NextDouble (), R.NextDouble (), R.NextDouble ());
+      Vector3 V () => new (R.NextDouble (), R.NextDouble (), R.NextDouble ());
+      double Span () => R.Next (5, 95) * fsize;
+   }
+
+   // ═══════════════════════════════════════════════════════════════════════════════
+   // 5d. AABBTreeDemo
+   // ═══════════════════════════════════════════════════════════════════════════════
+
+   /// <summary>AABB tree demo — cow mesh with bounding volume hierarchy at level 5</summary>
+   static SceneInitMsg AABBTreeDemo () {
+      // Load cow mesh from zip
+      ZipArchive zar = new (File.OpenRead ($"{Lib.DevRoot}/TData/IO/MESH/cow.zip"));
+      ZipArchiveEntry ze = zar.GetEntry ("cow.obj")!;
+      ZipReadStream zstm = new (ze.Open (), ze.Length);
+      Mesh3 mesh = Mesh3.LoadObj (zstm.ReadAllLines ());
+      mesh *= Matrix3.Rotation (EAxis.X, Lib.HalfPI) * Matrix3.Rotation (EAxis.Z, -Lib.HalfPI);
+
+      // Build collision mesh and extract AABB boxes at level 5
+      CMesh cmesh = CMesh.Builder.Build (mesh);
+      List<Bound3> boxes = cmesh.EnumBoxes (5).ToList ();
+
+      // Build box wireframes
+      List<Point3> boxLines = [];
+      foreach (Bound3 box in boxes) {
+         (Bound1 bx, Bound1 by, Bound1 bz) = (box.X, box.Y, box.Z);
+         Point3 a = new (bx.Min, by.Min, bz.Min), b = new (bx.Max, by.Min, bz.Min);
+         Point3 c = new (bx.Max, by.Max, bz.Min), d2 = new (bx.Min, by.Max, bz.Min);
+         Point3 e = new (bx.Min, by.Min, bz.Max), f = new (bx.Max, by.Min, bz.Max);
+         Point3 g = new (bx.Max, by.Max, bz.Max), h = new (bx.Min, by.Max, bz.Max);
+         boxLines.AddRange ([a, b, b, c, c, d2, d2, a, e, f, f, g, g, h, h, e, a, e, b, f, c, g, d2, h]);
+      }
+
+      Bound3 meshBound = mesh.Bound;
+      return new SceneInitMsg {
+         SceneType = ESceneType.Scene3D,
+         BgColor = [64, 64, 64, 255],
+         Bounds = Bounds3D (meshBound),
+         Transforms = IdentityTransform (),
+         Entities = [
+            new EntityDataMsg {
+               Id = 0,
+               Primitives = [RenderCapture.CaptureMesh (mesh, [128, 128, 128, 255], shadeMode: 0)],
+            },
+            new EntityDataMsg {
+               Id = 1,
+               Primitives = [RenderCapture.CaptureLines3 (boxLines, [255, 255, 255, 255], lineWidth: 2f)],
+            },
+         ],
+      };
+   }
+
+   // ═══════════════════════════════════════════════════════════════════════════════
    // Helpers
    // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -381,6 +642,9 @@ public static class DemoScenes {
 
    static float[] Bounds2D (Bound2 b)
       => [(float)b.X.Min, (float)b.Y.Min, (float)b.X.Max, (float)b.Y.Max];
+
+   static float[] Bounds3D (Bound3 b)
+      => [b.X.Min, b.Y.Min, b.Z.Min, b.X.Max, b.Y.Max, b.Z.Max];
 
    /// <summary>Capture a list of Poly as Lines2D + Beziers2D primitives</summary>
    static void CapturePolys (IEnumerable<Poly> polys, byte[] rgba, List<RenderPrimitive> prims,
