@@ -9,18 +9,24 @@ using System.Net.WebSockets;
 namespace Nori;
 
 /// <summary>Nori rendering server — integrable into any .NET host</summary>
-public class NoriServer {
+public class NoriServer : IDisposable {
    readonly NoriServerConfig mConfig;
    readonly ConcurrentDictionary<string, NoriSession> mSessions = new ();
    readonly SceneSerializer mSerializer = new ();
+   readonly ChangeTracker mTracker;
    HttpListener? mListener;
+   Dwg2? mDwg;
 
    public NoriServer (NoriServerConfig? config = null) {
       mConfig = config ?? new NoriServerConfig ();
+      mTracker = new ChangeTracker (this);
    }
 
    /// <summary>The active Dwg2 scene being served</summary>
-   public Dwg2? Dwg { get; set; }
+   public Dwg2? Dwg {
+      get => mDwg;
+      set { mDwg = value; mTracker.Track (value); }
+   }
 
    /// <summary>Number of active sessions</summary>
    public int SessionCount => mSessions.Count;
@@ -135,6 +141,12 @@ public class NoriServer {
          .ToArray ();
       await Task.WhenAll (closeTasks).ConfigureAwait (false);
       mSessions.Clear ();
+   }
+
+   /// <summary>Dispose the server and release all tracked resources</summary>
+   public void Dispose () {
+      mTracker.Dispose ();
+      mListener?.Close ();
    }
 
    /// <summary>Broadcast binary data to all connected clients</summary>
