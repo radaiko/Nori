@@ -1,4 +1,0 @@
-[     150ms] [ERROR] Failed to load module script: Expected a JavaScript-or-Wasm module script but the server responded with a MIME type of "". Strict MIME type checking is enforced for module scripts per HTML spec. @ http://127.0.0.1:50305/_framework/dotnet.js:0
-[     152ms] Error: Failed to start platform. Reason: TypeError: Failed to fetch dynamically imported module: http://127.0.0.1:50305/_framework/dotnet.js
-    at qt (http://127.0.0.1:50305/_framework/blazor.webassembly.js:1:58420)
-[     151ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://127.0.0.1:50305/favicon.ico:0
