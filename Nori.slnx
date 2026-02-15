@@ -15,4 +15,5 @@
   <Project Path="Platform/Nori.Platform.csproj" />
   <Project Path="GPU/Nori.GPU.csproj" />
   <Project Path="Lux/Nori.Lux.csproj" />
+  <Project Path="Nori.Server/Nori.Server.csproj" />
 </Solution>
