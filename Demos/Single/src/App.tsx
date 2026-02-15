@@ -2,20 +2,20 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { NoriRenderer } from '@nori/renderer';
 
 const DEMOS = [
-  { id: 'dwg', label: 'Drawing Entities' },
-  { id: 'linefont', label: 'Line Font' },
-  { id: 'convexhull', label: 'Convex Hull' },
-  { id: 'boolean', label: 'Polygon Boolean' },
-  { id: 'leaf', label: 'Leaf Fill' },
-  { id: 'mesh', label: '3D Mesh' },
+  { id: 'leaf', label: 'Polygon Fill' },
+  { id: 'linefont', label: 'Line Fonts' },
+  { id: 'mesh', label: 'Load TMesh' },
   { id: 'tess', label: 'Tessellation' },
-  { id: 'mes', label: 'Min Enclosing Sphere' },
+  { id: 'boolean', label: 'Poly Boolean' },
+  { id: 'dwg', label: 'Load DXF' },
+  { id: 'robot', label: 'Robot IK/FK' },
+  { id: 'stp', label: 'Load STEP' },
   { id: 'aabbtree', label: 'AABB Tree' },
-  { id: 't3x', label: 'T3X Viewer' },
-  { id: 'stp', label: 'STEP Viewer' },
-  { id: 'obb', label: 'OBB Builder' },
-  { id: 'meshslice', label: 'Mesh Slicing' },
-  { id: 'robot', label: 'Robot' },
+  { id: 'mes', label: 'Min. Sphere' },
+  { id: 't3x', label: 'Load T3X File' },
+  { id: 'meshslice', label: 'Slice Mesh' },
+  { id: 'convexhull', label: 'Convex Hull' },
+  { id: 'obb', label: 'Build OBB' },
 ];
 
 interface EntityInfo {
@@ -29,7 +29,7 @@ export default function App() {
   const [connected, setConnected] = useState(false);
   const [fps, setFps] = useState(0);
   const [pickedEntity, setPickedEntity] = useState<EntityInfo | null>(null);
-  const [selectedDemo, setSelectedDemo] = useState('dwg');
+  const [selectedDemo, setSelectedDemo] = useState('leaf');
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -46,7 +46,10 @@ export default function App() {
       serverUrl: 'ws://localhost:5100/',
     });
 
-    renderer.onConnected = () => setConnected(true);
+    renderer.onConnected = () => {
+      setConnected(true);
+      renderer.sendCommand('demo', 'leaf');
+    };
     renderer.onDisconnected = () => setConnected(false);
     renderer.onFps = setFps;
     renderer.onSceneLoaded = () => renderer.resetView();
@@ -72,54 +75,74 @@ export default function App() {
     };
   }, []);
 
-  const handleResetView = useCallback(() => {
-    rendererRef.current?.resetView();
-  }, []);
-
-  const handleDemoChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    const demoId = e.target.value;
+  const handleDemoClick = useCallback((demoId: string) => {
     setSelectedDemo(demoId);
     rendererRef.current?.sendCommand('demo', demoId);
   }, []);
 
+  const handleResetView = useCallback(() => {
+    rendererRef.current?.resetView();
+  }, []);
+
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Toolbar */}
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'row' }}>
+      {/* Left sidebar */}
       <div style={{
-        height: 40, display: 'flex', alignItems: 'center', gap: 8,
-        padding: '0 12px',
-        background: '#1a1a2e', borderBottom: '1px solid #333',
-        color: '#ccc', fontFamily: 'system-ui, sans-serif', fontSize: 13,
+        width: 130, display: 'flex', flexDirection: 'column',
+        background: '#888', padding: '4px 0',
+        fontFamily: 'system-ui, sans-serif', fontSize: 12,
+        flexShrink: 0,
       }}>
-        <span style={{ fontWeight: 600, color: '#fff', marginRight: 12 }}>Nori</span>
+        {/* Title */}
+        <div style={{
+          padding: '4px 8px 8px', fontWeight: 700, fontSize: 13,
+          color: '#000', borderBottom: '1px solid #777', marginBottom: 4,
+          display: 'flex', alignItems: 'center', gap: 6,
+        }}>
+          NORI Demos
+          <span style={{
+            width: 8, height: 8, borderRadius: '50%', display: 'inline-block',
+            background: connected ? '#4caf50' : '#f44336',
+          }} />
+        </div>
 
-        {/* Connection indicator */}
-        <span style={{
-          width: 8, height: 8, borderRadius: '50%',
-          background: connected ? '#4caf50' : '#f44336',
-          display: 'inline-block',
-        }} />
-        <span>{connected ? 'Connected' : 'Disconnected'}</span>
-
-        <select value={selectedDemo} onChange={handleDemoChange} style={selectStyle}>
-          {DEMOS.map(d => <option key={d.id} value={d.id}>{d.label}</option>)}
-        </select>
+        {/* Demo buttons */}
+        {DEMOS.map(d => (
+          <button
+            key={d.id}
+            onClick={() => handleDemoClick(d.id)}
+            style={{
+              margin: '0 4px 4px', padding: '3px 7px',
+              border: '1px solid #666',
+              borderRadius: 2,
+              background: selectedDemo === d.id ? '#b0b0b0' : '#ddd',
+              fontWeight: selectedDemo === d.id ? 600 : 400,
+              color: '#000', cursor: 'pointer',
+              fontSize: 12, textAlign: 'left',
+            }}
+          >
+            {d.label}
+          </button>
+        ))}
 
         <div style={{ flex: 1 }} />
 
-        {/* Viewport controls */}
-        <button onClick={handleResetView} style={btnStyle}>
+        {/* Bottom controls */}
+        <button onClick={handleResetView} style={{
+          margin: '0 4px 4px', padding: '3px 7px',
+          border: '1px solid #666', borderRadius: 2,
+          background: '#ddd', color: '#000', cursor: 'pointer',
+          fontSize: 11,
+        }}>
           Zoom Extents
         </button>
-
-        {/* FPS */}
-        <span style={{ fontFamily: 'monospace', color: '#888' }}>
+        <div style={{ padding: '2px 8px', fontSize: 11, color: '#333', fontFamily: 'monospace' }}>
           {fps} FPS
-        </span>
+        </div>
       </div>
 
       {/* Main viewport */}
-      <div style={{ flex: 1, position: 'relative' }}>
+      <div style={{ flex: 1, position: 'relative', background: '#000' }}>
         <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
 
         {/* Picked entity info */}
@@ -140,15 +163,3 @@ export default function App() {
     </div>
   );
 }
-
-const btnStyle: React.CSSProperties = {
-  padding: '4px 12px', border: '1px solid #555', borderRadius: 4,
-  background: '#2a2a3e', color: '#ccc', cursor: 'pointer',
-  fontSize: 12,
-};
-
-const selectStyle: React.CSSProperties = {
-  padding: '4px 8px', border: '1px solid #555', borderRadius: 4,
-  background: '#2a2a3e', color: '#ccc', cursor: 'pointer',
-  fontSize: 12, marginLeft: 8,
-};

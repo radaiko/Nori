@@ -79,7 +79,6 @@ public static class DemoScenes {
       List<Poly> polys = [];
       List<Point2> refPts = [];
       LineFont lf = LineFont.Get ("simplex");
-
       refPts.AddRange ([new (0, 0), new (0, 5), new (0, 10), new (0, 15)]);
       Out (0, 0, ETextAlign.BotLeft);
       Out (0, 5, ETextAlign.BaseLeft);
@@ -98,7 +97,6 @@ public static class DemoScenes {
       Out3 (8, 25, ETextAlign.BaseCenter);
       Out3 (8, 30, ETextAlign.BaseRight);
       lf.Render ("TRIPE", new (0, 17), ETextAlign.BaseLeft, 15.D2R (), 1, 2, 0, polys);
-
       polys.Add (Poly.Line (-1, 5, 9, 5));
       polys.Add (Poly.Line (-1, 7, 9, 7));
 
@@ -207,9 +205,9 @@ public static class DemoScenes {
    // 4d. BooleanDemo
    // ═══════════════════════════════════════════════════════════════════════════════
 
-   /// <summary>Boolean operations demo — shows input polys in 4 quadrants (ops not available cross-platform)</summary>
+   /// <summary>Boolean operations demo — Union, Intersection, Subtraction in 4 quadrants</summary>
    static SceneInitMsg BooleanDemo () {
-      // Build the same 6 poly sets as the shared version
+      // Build the same 6 poly sets as the WPF version
       List<List<Poly>> polySets = [
          [Poly.Polygon ((300, 350), 300, 3),
          Poly.Polygon ((300, 350), 300, 3, Lib.PI)],
@@ -225,7 +223,7 @@ public static class DemoScenes {
          Poly.Rectangle (850, 950, 1450, 1150)],
 
          [Poly.Rectangle (1700, 50, 2150, 650),
-         Poly.Rectangle (1850, 150, 2300, 550)],
+         Poly.Rectangle (1850, 150, 2300, 550).Subtract (Poly.Rectangle (1850, 275, 2225, 425)).First ()],
 
          [Poly.Parse ("M1700,850H2500V1250Q2300,1450,-1H1900Q1700,1250,1Z"),
          Poly.Circle ((2000, 1150), 180)],
@@ -235,20 +233,21 @@ public static class DemoScenes {
       Bound2 baseBound = new (polySets.SelectMany (a => a).Select (a => a.GetBound ()));
       // Extend to include 2x the max (for the 4-quadrant layout)
       baseBound += new Point2 (2 * baseBound.X.Max, 2 * baseBound.Y.Max);
-      Bound2 sceneBound = baseBound.InflatedF (1.05);
+      Bound2 sceneBound = baseBound.InflatedF (1.15);
       Point2 mid = baseBound.Midpoint;
 
-      // Flatten all input polys
+      // Compute boolean results (matching WPF)
       List<Poly> allPolys = polySets.SelectMany (a => a).ToList ();
+      List<Poly> unionPolys = polySets.SelectMany (x => x).ToList ().AsSpan ().Union ();
+      List<Poly> intersectPolys = polySets.SelectMany (a => a.AsSpan ().Intersect ()).ToList ();
+      List<Poly> subtractPolys = polySets.SelectMany (a => a.AsSpan ()[..1].Subtract (a.AsSpan ()[1..])).ToList ();
 
-      // Quadrant offsets: TopLeft=Polys, TopRight=Union, BotLeft=Intersection, BotRight=Subtraction
-      // In the shared version, the quadrant offsets depend on viewport. For the static version,
-      // we use simple offsets based on bound halves.
+      // Quadrant layout: TopLeft=Polys, TopRight=Union, BotLeft=Intersection, BotRight=Subtraction
       double dx = baseBound.Width * 0.02 / 2;
       double dy = baseBound.Height * 0.02 / 2;
       (double, double)[] quadOffsets = [
          (-dx, -dy),  // Polys (top-left)
-         (dx, -dy),   // Union (top-right) — same polys since no boolean ops
+         (dx, -dy),   // Union (top-right)
          (-dx, dy),   // Intersection (bottom-left)
          (dx, dy),    // Subtraction (bottom-right)
       ];
@@ -259,6 +258,8 @@ public static class DemoScenes {
          (0, halfH),
          (halfW, halfH),
       ];
+
+      List<Poly>[] quadPolys = [allPolys, unionPolys, intersectPolys, subtractPolys];
 
       List<EntityDataMsg> entities = [];
       int entId = 0;
@@ -276,11 +277,13 @@ public static class DemoScenes {
          (double offX, double offY) = (quadOffsets[q].Item1 + quadShifts[q].Item1,
                                         quadOffsets[q].Item2 + quadShifts[q].Item2);
 
-         // Translate each poly and capture as lines
+         // Translate polys for this quadrant and capture
          List<Poly> translated = [];
-         foreach (Poly poly in allPolys)
+         foreach (Poly poly in quadPolys[q])
             translated.Add (poly * Matrix2.Translation (offX, offY));
          CapturePolys (translated, colors[q], prims);
+         if (q >= 1) // Fills only for Union/Intersection/Subtraction quadrants (matching WPF)
+            CaptureFills (translated, [255, 255, 192, 255], prims);
 
          entities.Add (new EntityDataMsg { Id = entId++, Primitives = prims.ToArray () });
       }
@@ -301,7 +304,7 @@ public static class DemoScenes {
       // Labels rendered as line-font text
       List<RenderPrimitive> labelPrims = [];
       List<Poly> labelPolys = [];
-      double labelSize = baseBound.Width * 0.015;
+      double labelSize = baseBound.Width * 0.008;
       lf.Render ("Polys", new (mid.X - 10, mid.Y - 10), ETextAlign.TopRight, 0, 1, labelSize, 0, labelPolys);
       lf.Render ("Union", new (mid.X + 10, mid.Y - 10), ETextAlign.TopLeft, 0, 1, labelSize, 0, labelPolys);
       lf.Render ("Intersection", new (mid.X - 10, mid.Y + 10), ETextAlign.BotRight, 0, 1, labelSize, 0, labelPolys);
@@ -922,24 +925,53 @@ public static class DemoScenes {
       return [a, b, b, c, c, d, d, a, e, f, f, g, g, h, h, e, a, e, b, f, c, g, d, h];
    }
 
-   /// <summary>Capture a list of Poly as Lines2D + Beziers2D primitives</summary>
+   /// <summary>Capture each Poly as a separate Fill2D primitive (avoids XOR stencil artifacts on overlap)</summary>
+   static void CaptureFills (IEnumerable<Poly> polys, byte[] rgba, List<RenderPrimitive> prims,
+      int zLevel = -1) {
+      foreach (Poly poly in polys) {
+         List<Point2> pts = new ();
+         poly.Discretize (pts, 0.1, 0.5);
+         if (pts.Count < 2) continue;
+         Bound2 bound = new (pts.Select (p => p));
+         List<float> fillData = [];
+         List<int> indices = [];
+         // Index 0 = hub vertex at bounding box midpoint
+         Vec2F hub = bound.Midpoint;
+         fillData.Add (hub.X); fillData.Add (hub.Y);
+         indices.Add (0); // hub
+         foreach (Point2 pt in pts) {
+            indices.Add (fillData.Count / 2);
+            fillData.Add ((float)pt.X); fillData.Add ((float)pt.Y);
+         }
+         indices.AddRange ([1, -1]); // close fan + delimiter
+         prims.Add (new RenderPrimitive {
+            Type = EPrimType.Fill2D,
+            Data = fillData.ToArray (),
+            Indices = indices.ToArray (),
+            Color = rgba,
+            ZLevel = zLevel,
+            BoundData = [(float)bound.X.Min, (float)bound.Y.Min, (float)bound.X.Max, (float)bound.Y.Max],
+         });
+      }
+   }
+
+   /// <summary>Capture a list of Poly as Lines2D primitives (arcs are flattened to line segments)</summary>
    static void CapturePolys (IEnumerable<Poly> polys, byte[] rgba, List<RenderPrimitive> prims,
       float lineWidth = 2f) {
-      List<float> lineData = new (), bezierData = new ();
-      foreach (Poly poly in polys)
-         foreach (Seg seg in poly.Segs) {
-            if (seg.IsArc) {
-               List<Vec2F> bezPts = new ();
-               seg.ToBeziers (bezPts);
-               foreach (Vec2F pt in bezPts) { bezierData.Add (pt.X); bezierData.Add (pt.Y); }
-            } else {
-               lineData.Add ((float)seg.A.X); lineData.Add ((float)seg.A.Y);
-               lineData.Add ((float)seg.B.X); lineData.Add ((float)seg.B.Y);
-            }
+      List<float> lineData = new ();
+      foreach (Poly poly in polys) {
+         List<Point2> pts = new ();
+         poly.Discretize (pts, 0.1, 0.5);
+         for (int i = 0; i < pts.Count - 1; i++) {
+            lineData.Add ((float)pts[i].X); lineData.Add ((float)pts[i].Y);
+            lineData.Add ((float)pts[i + 1].X); lineData.Add ((float)pts[i + 1].Y);
          }
+         if (poly.IsClosed && pts.Count > 1) {
+            lineData.Add ((float)pts[^1].X); lineData.Add ((float)pts[^1].Y);
+            lineData.Add ((float)pts[0].X); lineData.Add ((float)pts[0].Y);
+         }
+      }
       if (lineData.Count > 0)
          prims.Add (new RenderPrimitive { Type = EPrimType.Lines2D, Data = lineData.ToArray (), Color = rgba, LineWidth = lineWidth });
-      if (bezierData.Count > 0)
-         prims.Add (new RenderPrimitive { Type = EPrimType.Beziers2D, Data = bezierData.ToArray (), Color = rgba, LineWidth = lineWidth });
    }
 }

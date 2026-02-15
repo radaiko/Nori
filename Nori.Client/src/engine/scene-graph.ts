@@ -156,10 +156,9 @@ export class ClientScene {
   }
 
   /**
-   * Port of Scene3.ComputeXfms:
-   *   worldXfm = Translation(-mid) * Rotation(quaternion)
-   *   projectionXfm = Orthographic(frustum) * Translation(pan)
-   *   combined = worldXfm * projectionXfm
+   * Port of Scene3.ComputeXfms.
+   * C# uses row-vector convention (v * M), WGSL uses column-vector (M * v),
+   * so multiplication order is reversed: combined = projection * world.
    */
   private compute3DProjection(w: number, h: number): Float32Array {
     const b = this.bounds; // [x0, y0, z0, x1, y1, z1]
@@ -172,10 +171,10 @@ export class ClientScene {
     const zRad = this.zRot * Math.PI / 180;
     const q = quaternionFromAxisRotations(xRad, 0, zRad);
 
-    // worldXfm = Translation(-mid) * Rotation(q)
+    // worldXfm: translate center to origin, then rotate
     const transMid = mat4Translation(-midX, -midY, -midZ);
     const rotMat = mat4FromQuaternion(q);
-    const worldXfm = mat4Multiply(transMid, rotMat);
+    const worldXfm = mat4Multiply(rotMat, transMid);
 
     // Compute frustum for orthographic projection
     const diagX = b[3] - b[0];
@@ -194,13 +193,39 @@ export class ClientScene {
     }
 
     // Orthographic: maps frustum to clip space
-    // X,Y -> [-1,1], Z -> [0,1] (WebGPU convention, larger Z -> 0 near, smaller -> 1 far)
+    // X,Y -> [-1,1], Z -> [0,1] (WebGPU convention)
     const ortho = mat4Orthographic(-dx, dx, -dy, dy, -radius, radius);
     const transPan = mat4Translation(this.panX, this.panY, 0);
-    const projectionXfm = mat4Multiply(ortho, transPan);
+    const projectionXfm = mat4Multiply(transPan, ortho);
 
-    // Combined: worldXfm * projectionXfm
-    return mat4Multiply(worldXfm, projectionXfm);
+    // Combined: projection * world (column-vector convention)
+    return mat4Multiply(projectionXfm, worldXfm);
+  }
+
+  /** Convert screen coordinates to world coordinates (2D scenes only) */
+  screenToWorld2D(screenX: number, screenY: number, viewW: number, viewH: number): { x: number; y: number } {
+    const b = this.bounds; // [x0, y0, x1, y1]
+    const factor = 1 / this.zoom;
+    const midX = (b[0] + b[2]) / 2;
+    const midY = (b[1] + b[3]) / 2;
+    const halfW = Math.max(((b[2] - b[0]) / 2) * factor, 1);
+    const halfH = Math.max(((b[3] - b[1]) / 2) * factor, 1);
+
+    let dx = halfW;
+    let dy = halfH;
+    const aspect = Math.max(viewW, 1) / Math.max(viewH, 1);
+    if (dx / dy > aspect) dy = dx / aspect;
+    else dx = dy * aspect;
+
+    // Screen to NDC
+    const ndcX = (screenX * 2) / viewW - 1;
+    const ndcY = 1 - (screenY * 2) / viewH;
+
+    // NDC to world (inverse of projection)
+    return {
+      x: (ndcX - this.panX) * dx + midX,
+      y: (ndcY - this.panY) * dy + midY,
+    };
   }
 
   /** Add or update an entity in the scene */
