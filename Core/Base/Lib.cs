@@ -124,6 +124,7 @@ public static class Lib {
          }
          AddAssembly (Assembly.GetExecutingAssembly ());
          AddNamespace ("Nori"); AddNamespace ("System"); AddNamespace ("System.Collections.Generic");
+         Tessellate = Tess2D.Process;
       }
    }
    static bool sInited;
