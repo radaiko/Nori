@@ -25,6 +25,9 @@ const UNIFORM_SIZE_FLAT = 80;
 // 3D facet uniforms: mat4x4 xfm (64) + mat4x4 normalXfm (64) + vec4 color (16) = 144
 const UNIFORM_SIZE_FACET = 144;
 
+// Post-process uniforms: vec2 texelSize (8) + f32 thresholdNormal (4) + f32 thresholdDepth (4) = 16
+const UNIFORM_SIZE_POST = 16;
+
 // ---------------------------------------------------------------------------
 // Renderer
 // ---------------------------------------------------------------------------
@@ -40,6 +43,13 @@ export class Renderer {
 
   // Re-usable uniform buffer (sized to max uniform size)
   private uniformBuf: GPUBuffer | null = null;
+
+  // Edge composite resources (created once, recreated on resize)
+  private edgeSampler: GPUSampler | null = null;
+  private edgeBindGroup: GPUBindGroup | null = null;
+  private edgeUniformBuf: GPUBuffer | null = null;
+  private edgeTexW: number = 0;
+  private edgeTexH: number = 0;
 
   // FPS tracking
   private frameCount: number = 0;
@@ -91,13 +101,17 @@ export class Renderer {
     this.stop();
     this.uniformBuf?.destroy();
     this.uniformBuf = null;
+    this.edgeUniformBuf?.destroy();
+    this.edgeUniformBuf = null;
+    this.edgeBindGroup = null;
+    this.edgeSampler = null;
   }
 
   // -------------------------------------------------------------------------
   // Internals
   // -------------------------------------------------------------------------
 
-  /** Check if canvas was resized; if so, recreate depth texture */
+  /** Check if canvas was resized; if so, recreate depth texture and edge resources */
   private checkResize(): void {
     const w = this.gpu.canvas.width;
     const h = this.gpu.canvas.height;
@@ -105,8 +119,44 @@ export class Renderer {
       this.lastCanvasW = w;
       this.lastCanvasH = h;
       this.gpu.createDepthTexture();
+      this.rebuildEdgeBindGroup();
       this.dirty = true;
     }
+  }
+
+  /** Rebuild the edge composite bind group after resize (textures changed) */
+  private rebuildEdgeBindGroup(): void {
+    const device = this.gpu.device;
+    const w = this.gpu.width;
+    const h = this.gpu.height;
+
+    if (!this.edgeSampler) {
+      this.edgeSampler = device.createSampler({
+        magFilter: 'linear',
+        minFilter: 'linear',
+        label: 'edge-sampler',
+      });
+    }
+
+    this.edgeUniformBuf?.destroy();
+    const postData = new Float32Array(UNIFORM_SIZE_POST / 4);
+    postData[0] = 1.0 / w;   // texel_size.x
+    postData[1] = 1.0 / h;   // texel_size.y
+    postData[2] = 0.4;       // edge_threshold_normal
+    postData[3] = 0.05;      // edge_threshold_depth
+    this.edgeUniformBuf = this.buffers.createUniformBuffer(UNIFORM_SIZE_POST, 'edge-uniform');
+    device.queue.writeBuffer(this.edgeUniformBuf, 0, postData.buffer, postData.byteOffset, postData.byteLength);
+
+    this.edgeBindGroup = device.createBindGroup({
+      layout: this.pipelines.postProcessLayout,
+      entries: [
+        { binding: 0, resource: { buffer: this.edgeUniformBuf } },
+        { binding: 1, resource: this.gpu.normalView },
+        { binding: 2, resource: this.edgeSampler },
+      ],
+    });
+    this.edgeTexW = w;
+    this.edgeTexH = h;
   }
 
   /** Render one complete frame */
@@ -134,9 +184,52 @@ export class Renderer {
       a: bg[3] / 255,
     };
 
+    // Compute transforms
+    const projMatrix = this.scene.computeProjectionMatrix(w, h);
+    const normalMatrix = this.scene.computeNormalMatrix(w, h);
+    const vpScaleX = 2 / w;
+    const vpScaleY = 2 / h;
+
+    // Sort primitives and check if any are 3D meshes
+    const primitives = this.scene.getAllPrimitivesSorted();
+    const has3D = primitives.some(p => p.type === PrimType.Mesh3D);
+    const hasGBufferPipeline = this.pipelines.has(Pipeline.GBufferNormal);
+
     const encoder = device.createCommandEncoder({ label: 'frame' });
 
-    const renderPass = encoder.beginRenderPass({
+    // --- Pass 1: G-Buffer (mesh scenes only) ---
+    if (has3D && hasGBufferPipeline) {
+      const gBufferPass = encoder.beginRenderPass({
+        label: 'gbuffer-pass',
+        colorAttachments: [{
+          view: this.gpu.normalView,
+          clearValue: { r: 0.5, g: 0.5, b: 1.0, a: 1.0 }, // default "up" normal
+          loadOp: 'clear',
+          storeOp: 'store',
+        }],
+        depthStencilAttachment: {
+          view: this.gpu.gBufferDepthView,
+          depthClearValue: 1.0,
+          depthLoadOp: 'clear',
+          depthStoreOp: 'store',
+          stencilClearValue: 0,
+          stencilLoadOp: 'clear',
+          stencilStoreOp: 'store',
+        },
+      });
+
+      const gBufferPipeline = this.pipelines.get(Pipeline.GBufferNormal);
+      for (const prim of primitives) {
+        if (prim.type === PrimType.Mesh3D) {
+          this.drawMesh3D(gBufferPass, gBufferPipeline, prim, projMatrix, normalMatrix, primColor(prim), device);
+        }
+      }
+
+      gBufferPass.end();
+    }
+
+    // --- Pass 2: Main scene pass ---
+    const mainPass = encoder.beginRenderPass({
       label: 'main-pass',
       colorAttachments: [{
         view: colorView,
@@ -155,21 +248,36 @@ export class Renderer {
       },
     });
 
-    // Compute transforms
-    const projMatrix = this.scene.computeProjectionMatrix(w, h);
-    const normalMatrix = this.scene.computeNormalMatrix(w, h);
-    const vpScaleX = 2 / w;
-    const vpScaleY = 2 / h;
-
-    // Sort primitives
-    const primitives = this.scene.getAllPrimitivesSorted();
-
-    // Draw each primitive
     for (const prim of primitives) {
-      this.drawPrimitive(renderPass, prim, projMatrix, normalMatrix, vpScaleX, vpScaleY, device);
+      this.drawPrimitive(mainPass, prim, projMatrix, normalMatrix, vpScaleX, vpScaleY, device, has3D);
     }
 
-    renderPass.end();
+    mainPass.end();
+
+    // --- Pass 3: Edge composite overlay (mesh scenes only) ---
+    if (has3D && hasGBufferPipeline && this.pipelines.has(Pipeline.EdgeComposite)) {
+      // Ensure edge bind group is up to date
+      if (!this.edgeBindGroup || this.edgeTexW !== w || this.edgeTexH !== h) {
+        this.rebuildEdgeBindGroup();
+      }
+
+      const edgePass = encoder.beginRenderPass({
+        label: 'edge-pass',
+        colorAttachments: [{
+          view: colorView,
+          loadOp: 'load',   // preserve existing scene
+          storeOp: 'store',
+        }],
+        // No depth-stencil — pure overlay
+      });
+
+      edgePass.setPipeline(this.pipelines.get(Pipeline.EdgeComposite));
+      edgePass.setBindGroup(0, this.edgeBindGroup!);
+      edgePass.draw(3);  // full-screen triangle
+
+      edgePass.end();
+    }
+
     device.queue.submit([encoder.finish()]);
   }
 
@@ -182,11 +290,18 @@ export class Renderer {
     vpScaleX: number,
     vpScaleY: number,
     device: GPUDevice,
+    has3D: boolean = false,
   ): void {
     if (!prim.data || prim.data.length === 0) return;
 
-    const pipelineId = this.scene.getPipeline(prim);
+    let pipelineId = this.scene.getPipeline(prim);
     if (pipelineId === null) return;
+
+    // For 3D mesh scenes, override shade-mode pipeline with CADGooch
+    if (has3D && prim.type === PrimType.Mesh3D && this.pipelines.has(Pipeline.CADGooch)) {
+      pipelineId = Pipeline.CADGooch;
+    }
+
     if (!this.pipelines.has(pipelineId)) return;
 
     // Handle Fill2D specially with two-pass stencil rendering
@@ -230,7 +345,8 @@ export class Renderer {
       case Pipeline.Pick:
       case Pipeline.Glass:
       case Pipeline.FlatFacet:
-        this.drawMesh3D(pass, pipeline, prim, projMatrix, normalMatrix, color, device);
+      case Pipeline.CADGooch:
+        this.drawMesh3D(pass, pipeline, prim, projMatrix, normalMatrix, color, device, [vpScaleX, vpScaleY]);
         break;
       default:
         break;
@@ -431,6 +547,7 @@ export class Renderer {
     normalMatrix: Float32Array,
     color: Float32Array,
     device: GPUDevice,
+    vpScale?: [number, number],
   ): void {
     // Facet uniform: mat4x4 xfm + mat4x4 normalXfm + vec4 color = 144 bytes
     const uniformData = new Float32Array(UNIFORM_SIZE_FACET / 4);
@@ -454,9 +571,9 @@ export class Renderer {
       pass.setIndexBuffer(indexBuf, 'uint32');
       pass.drawIndexed(prim.indices.length);
 
-      // Also draw wireframe edges if present
-      if (prim.wireIndices && prim.wireIndices.length > 0) {
-        this.drawWireEdges(pass, prim, projMatrix, vpScaleFromUniforms(uniformData), device);
+      // Draw wireframe edges if present (only when vpScale is provided — skip for G-Buffer)
+      if (vpScale && prim.wireIndices && prim.wireIndices.length > 0) {
+        this.drawWireEdges(pass, prim, projMatrix, vpScale, device);
       }
       this.deferDestroy(uniformBuf, vertexBuf, indexBuf);
     } else {
@@ -525,36 +642,85 @@ export class Renderer {
     device: GPUDevice,
   ): void {
     if (!this.pipelines.has(Pipeline.TriFanStencil) || !this.pipelines.has(Pipeline.TriFanCover)) return;
+    if (!prim.indices || prim.indices.length === 0) return;
 
     const color = primColor(prim);
     const uniformData = new Float32Array(UNIFORM_SIZE_FLAT / 4);
     uniformData.set(projMatrix, 0);
     uniformData.set(color, 16);
 
-    const vertexBuf = this.buffers.createVertexBuffer(prim.data, 'fill2d-verts');
+    // Expand triangle fan indices (with -1 delimiters) into a triangle list.
+    // Format: [hub, v0, v1, v2, ..., vN, v0, -1, hub, ...] where each fan
+    // produces triangles (hub,v0,v1), (hub,v1,v2), etc.
+    const indices = prim.indices;
+    const verts = prim.data; // x,y pairs
+    const tris: number[] = [];
+    let fanStart = 0;
+    for (let i = 0; i < indices.length; i++) {
+      const idx = indices[i];
+      if (idx === 0xFFFFFFFF || (idx | 0) === -1) { // -1 delimiter (unsigned or signed)
+        // Emit triangles for this fan: indices[fanStart] is hub,
+        // subsequent indices are the ring vertices
+        const hub = indices[fanStart];
+        for (let j = fanStart + 2; j < i; j++) {
+          const a = indices[j - 1], b = indices[j];
+          tris.push(verts[hub * 2], verts[hub * 2 + 1]);
+          tris.push(verts[a * 2], verts[a * 2 + 1]);
+          tris.push(verts[b * 2], verts[b * 2 + 1]);
+        }
+        fanStart = i + 1;
+      }
+    }
+
+    if (tris.length === 0) return;
+    const stencilData = new Float32Array(tris);
+    const stencilBuf = this.buffers.createVertexBuffer(stencilData, 'fill2d-stencil');
+
     const uniformBuf = this.createTempUniform(device, uniformData);
     const bindGroup = device.createBindGroup({
       layout: this.pipelines.uniformLayout,
       entries: [{ binding: 0, resource: { buffer: uniformBuf } }],
     });
 
-    const vertexCount = prim.data.length / 2;
-
-    // Pass 1: Write stencil (invert stencil bit, no color output)
+    // Pass 1: Write stencil (invert stencil bit for each triangle, no color output)
     pass.setPipeline(this.pipelines.get(Pipeline.TriFanStencil));
     pass.setBindGroup(0, bindGroup);
-    pass.setVertexBuffer(0, vertexBuf);
+    pass.setVertexBuffer(0, stencilBuf);
     pass.setStencilReference(1);
-    pass.draw(vertexCount);
+    pass.draw(stencilData.length / 2);
 
-    // Pass 2: Draw where stencil is set (clear stencil, write color)
+    // Pass 2: Draw a quad covering the bounding box where stencil is set
+    const bd = prim.boundData;
+    let coverData: Float32Array;
+    if (bd && bd.length >= 4) {
+      const [minX, minY, maxX, maxY] = bd;
+      coverData = new Float32Array([
+        minX, minY, maxX, minY, maxX, maxY,
+        minX, minY, maxX, maxY, minX, maxY,
+      ]);
+    } else {
+      // Fallback: compute bounds from vertices
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (let i = 0; i < verts.length; i += 2) {
+        if (verts[i] < minX) minX = verts[i];
+        if (verts[i] > maxX) maxX = verts[i];
+        if (verts[i + 1] < minY) minY = verts[i + 1];
+        if (verts[i + 1] > maxY) maxY = verts[i + 1];
+      }
+      coverData = new Float32Array([
+        minX, minY, maxX, minY, maxX, maxY,
+        minX, minY, maxX, maxY, minX, maxY,
+      ]);
+    }
+    const coverBuf = this.buffers.createVertexBuffer(coverData, 'fill2d-cover');
+
     pass.setPipeline(this.pipelines.get(Pipeline.TriFanCover));
     pass.setBindGroup(0, bindGroup);
-    pass.setVertexBuffer(0, vertexBuf);
-    pass.setStencilReference(1);
-    pass.draw(vertexCount);
+    pass.setVertexBuffer(0, coverBuf);
+    pass.setStencilReference(0);
+    pass.draw(6);
 
-    this.deferDestroy(uniformBuf, vertexBuf);
+    this.deferDestroy(uniformBuf, stencilBuf, coverBuf);
   }
 
   // -------------------------------------------------------------------------

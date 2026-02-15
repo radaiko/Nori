@@ -23,6 +23,9 @@ export function shaderSources(): Record<string, string> {
     TextPx: TEXTPX,
     Text2D: TEXT2D,
     Text3D: TEXT3D,
+    GBufferNormal: GBUFFER_NORMAL,
+    CADGooch: CAD_GOOCH,
+    EdgeComposite: EDGE_COMPOSITE,
   };
 }
 
@@ -888,5 +891,170 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         discard;
     }
     return vec4<f32>(uniforms.draw_color.rgb, r);
+}
+`;
+
+// ---------------------------------------------------------------------------
+// CAD pipeline shaders: G-Buffer, Gooch shading, Edge composite
+// ---------------------------------------------------------------------------
+
+const GBUFFER_NORMAL = /* wgsl */`
+struct Uniforms {
+    xfm: mat4x4<f32>,
+    normal_xfm: mat4x4<f32>,
+    draw_color: vec4<f32>,
+};
+
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+struct VertexInput {
+    @location(0) position: vec3<f32>,
+    @location(1) normal: vec3<f32>,
+};
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) normal: vec3<f32>,
+    @location(1) depth: f32,
+};
+
+@vertex
+fn vs_main(input: VertexInput) -> VertexOutput {
+    var out: VertexOutput;
+    out.position = uniforms.xfm * vec4<f32>(input.position, 1.0);
+    // Transform normal to view space using upper-left 3x3 of normal_xfm
+    out.normal = normalize(mat3x3<f32>(
+        uniforms.normal_xfm[0].xyz,
+        uniforms.normal_xfm[1].xyz,
+        uniforms.normal_xfm[2].xyz
+    ) * input.normal);
+    out.depth = out.position.z; // clip-space Z, already [0,1] in WebGPU
+    return out;
+}
+
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    let n = normalize(in.normal);
+    return vec4<f32>(n * 0.5 + 0.5, in.depth);
+}
+`;
+
+const CAD_GOOCH = /* wgsl */`
+struct Uniforms {
+    xfm: mat4x4<f32>,
+    normal_xfm: mat4x4<f32>,
+    draw_color: vec4<f32>,
+};
+
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+// Gooch bias colors (added to scaled object color)
+const COOL_BIAS = vec3<f32>(0.03, 0.03, 0.1);  // subtle blue in shadows
+const WARM_BIAS = vec3<f32>(0.1, 0.06, 0.0);    // subtle warm in highlights
+
+struct VertexInput {
+    @location(0) position: vec3<f32>,
+    @location(1) normal: vec3<f32>,
+};
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) normal: vec3<f32>,
+};
+
+@vertex
+fn vs_main(input: VertexInput) -> VertexOutput {
+    var out: VertexOutput;
+    out.normal = input.normal;
+    out.position = uniforms.xfm * vec4<f32>(input.position, 1.0);
+    return out;
+}
+
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    let light_dir = normalize(uniforms.normal_xfm[3].xyz);
+    let n = normalize(in.normal);
+    let NdotL = dot(light_dir, n);
+    let t = (1.0 + NdotL) * 0.5; // remap [-1,1] to [0,1]
+
+    // Gooch: object color preserved, with cool/warm bias
+    let k_cool = COOL_BIAS + 0.35 * uniforms.draw_color.rgb;
+    let k_warm = WARM_BIAS + 0.8 * uniforms.draw_color.rgb;
+    let color = mix(k_cool, k_warm, t);
+    return vec4<f32>(color, uniforms.draw_color.a);
+}
+`;
+
+const EDGE_COMPOSITE = /* wgsl */`
+struct PostUniforms {
+    texel_size: vec2<f32>,
+    edge_threshold_normal: f32,
+    edge_threshold_depth: f32,
+};
+
+@group(0) @binding(0) var<uniform> uniforms: PostUniforms;
+@group(0) @binding(1) var gbuf_texture: texture_2d<f32>;
+@group(0) @binding(2) var gbuf_sampler: sampler;
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+};
+
+@vertex
+fn vs_main(@builtin(vertex_index) vid: u32) -> VertexOutput {
+    // Full-screen triangle: 3 vertices cover entire screen
+    let uv = vec2<f32>(f32((vid << 1u) & 2u), f32(vid & 2u));
+    var out: VertexOutput;
+    out.position = vec4<f32>(uv * 2.0 - 1.0, 0.0, 1.0);
+    out.uv = vec2<f32>(uv.x, 1.0 - uv.y); // flip Y for texture coords
+    return out;
+}
+
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    let ts = uniforms.texel_size;
+
+    // Sample center and 3x3 neighborhood (all in uniform control flow)
+    let center = textureSample(gbuf_texture, gbuf_sampler, in.uv);
+    let tl = textureSample(gbuf_texture, gbuf_sampler, in.uv + vec2<f32>(-ts.x,  ts.y));
+    let tc = textureSample(gbuf_texture, gbuf_sampler, in.uv + vec2<f32>( 0.0,   ts.y));
+    let tr = textureSample(gbuf_texture, gbuf_sampler, in.uv + vec2<f32>( ts.x,  ts.y));
+    let ml = textureSample(gbuf_texture, gbuf_sampler, in.uv + vec2<f32>(-ts.x,  0.0));
+    let mr = textureSample(gbuf_texture, gbuf_sampler, in.uv + vec2<f32>( ts.x,  0.0));
+    let bl = textureSample(gbuf_texture, gbuf_sampler, in.uv + vec2<f32>(-ts.x, -ts.y));
+    let bc = textureSample(gbuf_texture, gbuf_sampler, in.uv + vec2<f32>( 0.0,  -ts.y));
+    let br = textureSample(gbuf_texture, gbuf_sampler, in.uv + vec2<f32>( ts.x, -ts.y));
+
+    // Background mask: if center pixel is background (depth ≈ 1.0), no edge
+    let is_geom = select(0.0, 1.0, center.a < 0.99);
+
+    // Sobel on normals (rgb)
+    let sx_n = -tl.rgb - 2.0 * ml.rgb - bl.rgb + tr.rgb + 2.0 * mr.rgb + br.rgb;
+    let sy_n = -tl.rgb - 2.0 * tc.rgb - tr.rgb + bl.rgb + 2.0 * bc.rgb + br.rgb;
+    let normal_edge = length(sx_n) + length(sy_n);
+
+    // Sobel on depth (alpha channel) — clamp background neighbors to center depth
+    // to avoid false silhouette edges from geometry-to-background transitions
+    let cd = center.a;
+    let d_tl = select(tl.a, cd, tl.a >= 0.99);
+    let d_tc = select(tc.a, cd, tc.a >= 0.99);
+    let d_tr = select(tr.a, cd, tr.a >= 0.99);
+    let d_ml = select(ml.a, cd, ml.a >= 0.99);
+    let d_mr = select(mr.a, cd, mr.a >= 0.99);
+    let d_bl = select(bl.a, cd, bl.a >= 0.99);
+    let d_bc = select(bc.a, cd, bc.a >= 0.99);
+    let d_br = select(br.a, cd, br.a >= 0.99);
+
+    let sx_d = -d_tl - 2.0 * d_ml - d_bl + d_tr + 2.0 * d_mr + d_br;
+    let sy_d = -d_tl - 2.0 * d_tc - d_tr + d_bl + 2.0 * d_bc + d_br;
+    let depth_edge = abs(sx_d) + abs(sy_d);
+
+    // Combine edge strengths with thresholds, masked by geometry
+    let n_strength = smoothstep(uniforms.edge_threshold_normal * 0.5, uniforms.edge_threshold_normal, normal_edge);
+    let d_strength = smoothstep(uniforms.edge_threshold_depth * 0.5, uniforms.edge_threshold_depth, depth_edge);
+    let alpha = max(n_strength, d_strength) * is_geom;
+
+    return vec4<f32>(0.0, 0.0, 0.0, alpha); // black edges, blended over scene
 }
 `;

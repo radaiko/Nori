@@ -30,6 +30,9 @@ export enum Pipeline {
   Text3D = 18,
   TriFanStencil = 19,
   TriFanCover = 20,
+  GBufferNormal = 21,
+  CADGooch = 22,
+  EdgeComposite = 23,
 }
 
 // ---------------------------------------------------------------------------
@@ -167,6 +170,7 @@ export class PipelineFactory {
   private shaderModules: Map<string, GPUShaderModule> = new Map();
   uniformLayout!: GPUBindGroupLayout;
   texturedLayout!: GPUBindGroupLayout;
+  postProcessLayout!: GPUBindGroupLayout;
 
   /** Initialize all pipelines for the given device and canvas format */
   async init(device: GPUDevice, format: GPUTextureFormat): Promise<void> {
@@ -219,6 +223,28 @@ export class PipelineFactory {
         {
           binding: 0,
           visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+          buffer: { type: 'uniform' },
+        },
+        {
+          binding: 1,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: { sampleType: 'float', viewDimension: '2d', multisampled: false },
+        },
+        {
+          binding: 2,
+          visibility: GPUShaderStage.FRAGMENT,
+          sampler: { type: 'filtering' },
+        },
+      ],
+    });
+
+    // Post-process layout for edge composite: uniform + normal+depth texture + sampler
+    this.postProcessLayout = device.createBindGroupLayout({
+      label: 'post-process-layout',
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.FRAGMENT,
           buffer: { type: 'uniform' },
         },
         {
@@ -286,6 +312,15 @@ export class PipelineFactory {
       failOp: 'keep',
       colorWrite: GPUColorWrite.ALL,
     });
+
+    // CAD pipeline: G-Buffer writes to rgba16float (not canvas format)
+    this.buildGBuffer(device, Pipeline.GBufferNormal, 'GBufferNormal', facet3DLayout);
+
+    // CAD pipeline: Gooch shading (same build as Phong — canvas format, depth enabled)
+    this.build(device, format, Pipeline.CADGooch, 'CADGooch', facet3DLayout, { depth: true });
+
+    // CAD pipeline: Edge composite (full-screen post-process, no vertex buffers)
+    this.buildPostProcess(device, format, Pipeline.EdgeComposite, 'EdgeComposite');
   }
 
   private build(
@@ -345,6 +380,93 @@ export class PipelineFactory {
         cullMode: 'none',
       },
       depthStencil,
+    });
+    this.pipelines.set(id, pipeline);
+  }
+
+  private buildGBuffer(
+    device: GPUDevice,
+    id: Pipeline,
+    shaderName: string,
+    layouts: GPUVertexBufferLayout[],
+  ): void {
+    const shader = this.shaderModules.get(shaderName);
+    if (!shader) {
+      console.warn(`Shader "${shaderName}" not found, skipping pipeline ${Pipeline[id]}`);
+      return;
+    }
+    const pipelineLayout = device.createPipelineLayout({
+      label: `${Pipeline[id]}-layout`,
+      bindGroupLayouts: [this.uniformLayout],
+    });
+
+    const pipeline = device.createRenderPipeline({
+      label: Pipeline[id],
+      layout: pipelineLayout,
+      vertex: {
+        module: shader,
+        entryPoint: 'vs_main',
+        buffers: layouts,
+      },
+      fragment: {
+        module: shader,
+        entryPoint: 'fs_main',
+        targets: [{
+          format: 'rgba16float',
+          writeMask: GPUColorWrite.ALL,
+        }],
+      },
+      primitive: {
+        topology: 'triangle-list',
+        cullMode: 'none',
+      },
+      depthStencil: {
+        format: 'depth24plus-stencil8',
+        depthWriteEnabled: true,
+        depthCompare: 'less-equal',
+      },
+    });
+    this.pipelines.set(id, pipeline);
+  }
+
+  private buildPostProcess(
+    device: GPUDevice,
+    format: GPUTextureFormat,
+    id: Pipeline,
+    shaderName: string,
+  ): void {
+    const shader = this.shaderModules.get(shaderName);
+    if (!shader) {
+      console.warn(`Shader "${shaderName}" not found, skipping pipeline ${Pipeline[id]}`);
+      return;
+    }
+    const pipelineLayout = device.createPipelineLayout({
+      label: `${Pipeline[id]}-layout`,
+      bindGroupLayouts: [this.postProcessLayout],
+    });
+
+    const pipeline = device.createRenderPipeline({
+      label: Pipeline[id],
+      layout: pipelineLayout,
+      vertex: {
+        module: shader,
+        entryPoint: 'vs_main',
+        buffers: [],  // No vertex buffers — full-screen triangle from vertex_index
+      },
+      fragment: {
+        module: shader,
+        entryPoint: 'fs_main',
+        targets: [{
+          format,
+          blend: ALPHA_BLEND,
+          writeMask: GPUColorWrite.ALL,
+        }],
+      },
+      primitive: {
+        topology: 'triangle-list',
+        cullMode: 'none',
+      },
+      // No depth-stencil — overlays on top of existing scene
     });
     this.pipelines.set(id, pipeline);
   }
