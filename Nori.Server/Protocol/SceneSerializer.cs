@@ -98,6 +98,10 @@ public class SceneSerializer {
    public static InteractionMsg DeserializeInteraction (byte[] payload)
       => MessagePackSerializer.Deserialize<InteractionMsg> (payload);
 
+   /// <summary>Deserialize a client Command message from envelope payload</summary>
+   public static CommandMsg DeserializeCommand (byte[] payload)
+      => MessagePackSerializer.Deserialize<CommandMsg> (payload);
+
    // Helpers -------------------------------------------------------------------
    static float[] IdentityTransform ()
       => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];

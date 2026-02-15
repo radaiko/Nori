@@ -16,6 +16,8 @@ public class NoriServer : IDisposable {
    readonly ChangeTracker mTracker;
    HttpListener? mListener;
    Dwg2? mDwg;
+   Model3? mModel;
+   SceneInitMsg? mCustomScene;
 
    public NoriServer (NoriServerConfig? config = null) {
       mConfig = config ?? new NoriServerConfig ();
@@ -26,6 +28,20 @@ public class NoriServer : IDisposable {
    public Dwg2? Dwg {
       get => mDwg;
       set { mDwg = value; mTracker.Track (value); }
+   }
+
+   /// <summary>The active Model3 scene being served</summary>
+   public Model3? Model {
+      get => mModel;
+      set { mModel = value; }
+   }
+
+   /// <summary>Set a custom scene built directly by demo code</summary>
+   public void SetCustomScene (SceneInitMsg scene) {
+      mCustomScene = scene;
+      // Broadcast to all connected clients
+      byte[] bytes = mSerializer.ToBytes (scene);
+      _ = BroadcastAsync (bytes);
    }
 
    /// <summary>Number of active sessions</summary>
@@ -42,6 +58,9 @@ public class NoriServer : IDisposable {
 
    /// <summary>Event raised when a client sends a pick request</summary>
    public event Action<NoriSession, PickMsg>? OnPick;
+
+   /// <summary>Event raised when a client sends a command</summary>
+   public event Action<NoriSession, CommandMsg>? OnCommand;
 
    // ═══════════════════════════════════════════════════════════════════════════════
    // Public API
@@ -69,8 +88,15 @@ public class NoriServer : IDisposable {
 
       try {
          // Send current scene if available
-         if (Dwg != null) {
+         if (mCustomScene != null) {
+            byte[] initBytes = mSerializer.ToBytes (mCustomScene);
+            await session.SendAsync (initBytes, ct).ConfigureAwait (false);
+         } else if (Dwg != null) {
             SceneInitMsg initMsg = mSerializer.SerializeDwg2 (Dwg);
+            byte[] initBytes = mSerializer.ToBytes (initMsg);
+            await session.SendAsync (initBytes, ct).ConfigureAwait (false);
+         } else if (Model != null) {
+            SceneInitMsg initMsg = mSerializer.SerializeModel3 (Model, Model.Bound);
             byte[] initBytes = mSerializer.ToBytes (initMsg);
             await session.SendAsync (initBytes, ct).ConfigureAwait (false);
          }
@@ -177,6 +203,10 @@ public class NoriServer : IDisposable {
          case EClientMsgType.Interaction:
             InteractionMsg interaction = SceneSerializer.DeserializeInteraction (envelope.Payload);
             OnInteraction?.Invoke (session, interaction);
+            break;
+         case EClientMsgType.Command:
+            CommandMsg cmd = SceneSerializer.DeserializeCommand (envelope.Payload);
+            OnCommand?.Invoke (session, cmd);
             break;
       }
    }

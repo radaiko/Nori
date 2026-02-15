@@ -147,3 +147,10 @@ public class InteractionMsg {
    [Key (3)] public float Z { get; set; }
    [Key (4)] public int Modifiers { get; set; }    // Shift=1, Ctrl=2, Alt=4
 }
+
+/// <summary>Command from client (e.g. switch demo, toggle option)</summary>
+[MessagePackObject]
+public class CommandMsg {
+   [Key (0)] public string Name { get; set; } = "";
+   [Key (1)] public string Arg { get; set; } = "";
+}
