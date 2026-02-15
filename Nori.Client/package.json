@@ -1,0 +1,19 @@
+{
+  "name": "@nori/renderer",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist/", "shaders/"],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@webgpu/types": "^0.1.52"
+  },
+  "dependencies": {
+    "@msgpack/msgpack": "^3.0.0"
+  }
+}
