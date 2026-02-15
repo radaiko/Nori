@@ -142,8 +142,8 @@ export class Renderer {
     const postData = new Float32Array(UNIFORM_SIZE_POST / 4);
     postData[0] = 1.0 / w;   // texel_size.x
     postData[1] = 1.0 / h;   // texel_size.y
-    postData[2] = 0.7;       // edge_threshold_normal
-    postData[3] = 0.08;      // edge_threshold_depth
+    postData[2] = 0.25;      // edge_threshold_normal (feature edges from normal discontinuities)
+    postData[3] = 0.01;      // edge_threshold_depth (unused — silhouette uses bg neighbor check)
     this.edgeUniformBuf = this.buffers.createUniformBuffer(UNIFORM_SIZE_POST, 'edge-uniform');
     device.queue.writeBuffer(this.edgeUniformBuf, 0, postData.buffer, postData.byteOffset, postData.byteLength);
 
@@ -197,24 +197,25 @@ export class Renderer {
 
     const encoder = device.createCommandEncoder({ label: 'frame' });
 
-    // --- Pass 1: G-Buffer (mesh scenes only) ---
+    // --- Pass 1: G-Buffer with MSAA (mesh scenes only) ---
     if (has3D && hasGBufferPipeline) {
       const gBufferPass = encoder.beginRenderPass({
         label: 'gbuffer-pass',
         colorAttachments: [{
-          view: this.gpu.normalView,
-          clearValue: { r: 0.5, g: 0.5, b: 1.0, a: 1.0 }, // default "up" normal
+          view: this.gpu.msaaNormalView,          // MSAA render target
+          resolveTarget: this.gpu.normalView,     // resolve to single-sample for edge composite
+          clearValue: { r: 0.5, g: 0.5, b: 1.0, a: 1.0 },
           loadOp: 'clear',
-          storeOp: 'store',
+          storeOp: 'discard',  // MSAA intermediate discarded after resolve
         }],
         depthStencilAttachment: {
-          view: this.gpu.gBufferDepthView,
+          view: this.gpu.msaaGBufDepthView,       // MSAA depth
           depthClearValue: 1.0,
           depthLoadOp: 'clear',
-          depthStoreOp: 'store',
+          depthStoreOp: 'discard',
           stencilClearValue: 0,
           stencilLoadOp: 'clear',
-          stencilStoreOp: 'store',
+          stencilStoreOp: 'discard',
         },
       });
 
@@ -229,30 +230,90 @@ export class Renderer {
     }
 
     // --- Pass 2: Main scene pass ---
-    const mainPass = encoder.beginRenderPass({
-      label: 'main-pass',
-      colorAttachments: [{
-        view: colorView,
-        clearValue: clearColor,
-        loadOp: 'clear',
-        storeOp: 'store',
-      }],
-      depthStencilAttachment: {
-        view: this.gpu.depthView,
-        depthClearValue: 1.0,
-        depthLoadOp: 'clear',
-        depthStoreOp: 'store',
-        stencilClearValue: 0,
-        stencilLoadOp: 'clear',
-        stencilStoreOp: 'store',
-      },
-    });
+    if (has3D && this.pipelines.has(Pipeline.CADGooch)) {
+      // Pass 2a: MSAA pass for 3D meshes (CADGooch pipeline uses 4x MSAA)
+      const msaaPass = encoder.beginRenderPass({
+        label: 'msaa-main-pass',
+        colorAttachments: [{
+          view: this.gpu.msaaColorView,      // MSAA render target
+          resolveTarget: colorView,           // resolve to canvas
+          clearValue: clearColor,
+          loadOp: 'clear',
+          storeOp: 'discard',                // MSAA intermediate discarded after resolve
+        }],
+        depthStencilAttachment: {
+          view: this.gpu.msaaDepthView,       // MSAA depth
+          depthClearValue: 1.0,
+          depthLoadOp: 'clear',
+          depthStoreOp: 'discard',
+          stencilClearValue: 0,
+          stencilLoadOp: 'clear',
+          stencilStoreOp: 'discard',
+        },
+      });
 
-    for (const prim of primitives) {
-      this.drawPrimitive(mainPass, prim, projMatrix, normalMatrix, vpScaleX, vpScaleY, device, has3D);
+      const cadPipeline = this.pipelines.get(Pipeline.CADGooch);
+      for (const prim of primitives) {
+        if (prim.type === PrimType.Mesh3D) {
+          this.drawMesh3D(msaaPass, cadPipeline, prim, projMatrix, normalMatrix, primColor(prim), device);
+        }
+      }
+      msaaPass.end();
+
+      // Pass 2b: Non-MSAA overlay for everything except 3D meshes
+      const hasNonMesh = primitives.some(p => p.type !== PrimType.Mesh3D);
+      if (hasNonMesh) {
+        const overlayPass = encoder.beginRenderPass({
+          label: 'overlay-pass',
+          colorAttachments: [{
+            view: colorView,
+            loadOp: 'load',     // preserve resolved MSAA result
+            storeOp: 'store',
+          }],
+          depthStencilAttachment: {
+            view: this.gpu.depthView,
+            depthClearValue: 1.0,
+            depthLoadOp: 'clear',
+            depthStoreOp: 'store',
+            stencilClearValue: 0,
+            stencilLoadOp: 'clear',
+            stencilStoreOp: 'store',
+          },
+        });
+
+        for (const prim of primitives) {
+          if (prim.type !== PrimType.Mesh3D) {
+            this.drawPrimitive(overlayPass, prim, projMatrix, normalMatrix, vpScaleX, vpScaleY, device, false);
+          }
+        }
+        overlayPass.end();
+      }
+    } else {
+      // Non-3D scenes: single pass (no MSAA needed)
+      const mainPass = encoder.beginRenderPass({
+        label: 'main-pass',
+        colorAttachments: [{
+          view: colorView,
+          clearValue: clearColor,
+          loadOp: 'clear',
+          storeOp: 'store',
+        }],
+        depthStencilAttachment: {
+          view: this.gpu.depthView,
+          depthClearValue: 1.0,
+          depthLoadOp: 'clear',
+          depthStoreOp: 'store',
+          stencilClearValue: 0,
+          stencilLoadOp: 'clear',
+          stencilStoreOp: 'store',
+        },
+      });
+
+      for (const prim of primitives) {
+        this.drawPrimitive(mainPass, prim, projMatrix, normalMatrix, vpScaleX, vpScaleY, device, has3D);
+      }
+      mainPass.end();
     }
-
-    mainPass.end();
 
     // --- Pass 3: Edge composite overlay (mesh scenes only) ---
     if (has3D && hasGBufferPipeline && this.pipelines.has(Pipeline.EdgeComposite)) {
@@ -345,6 +406,8 @@ export class Renderer {
       case Pipeline.Pick:
       case Pipeline.Glass:
       case Pipeline.FlatFacet:
+        this.drawMesh3D(pass, pipeline, prim, projMatrix, normalMatrix, color, device, [vpScaleX, vpScaleY]);
+        break;
       case Pipeline.CADGooch:
         this.drawMesh3D(pass, pipeline, prim, projMatrix, normalMatrix, color, device, [vpScaleX, vpScaleY]);
         break;
@@ -614,7 +677,7 @@ export class Renderer {
     uniformData.set(projMatrix, 0);
     uniformData[16] = vpScale[0];
     uniformData[17] = vpScale[1];
-    uniformData[18] = 1;  // 1px line width for wire edges
+    uniformData[18] = 1.5;  // wire edge line width (matches WPF BlackLine)
     uniformData[19] = 0;
     uniformData.set(blackColor, 20);
 
