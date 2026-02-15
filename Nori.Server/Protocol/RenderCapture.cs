@@ -262,10 +262,165 @@ public class RenderCapture {
       }
    }
 
+   // 3D capture ═════════════════════════════════════════════════════════════════
+
    /// <summary>Capture renderable data from a 3D scene model</summary>
    public static EntityDataMsg[] CaptureModel3 (Model3 model) {
       List<EntityDataMsg> entities = new ();
-      // TODO: Implement 3D entity capture (meshes, curves, surfaces)
+      for (int i = 0; i < model.Ents.Count; i++) {
+         Ent3 ent = model.Ents[i];
+         if (ent is E3Surface surf) {
+            RenderPrimitive? prim = CaptureSurface (surf);
+            if (prim != null)
+               entities.Add (new EntityDataMsg { Id = i, Primitives = [prim] });
+         }
+      }
       return entities.ToArray ();
+   }
+
+   /// <summary>Tessellate an E3Surface into a Mesh3D render primitive</summary>
+   static RenderPrimitive? CaptureSurface (E3Surface surf) {
+      Mesh3 mesh = surf.Mesh;
+      if (mesh.Vertex.Length == 0) return null;
+      byte[] rgba = [255, 255, 255, 255];
+      byte shadeMode = surf.IsTranslucent ? (byte)2 : (byte)1; // Glass=2, Phong=1
+      return CaptureMesh (mesh, rgba, shadeMode);
+   }
+
+   /// <summary>Convert a Mesh3 into a Mesh3D render primitive</summary>
+   public static RenderPrimitive CaptureMesh (Mesh3 mesh, byte[] rgba,
+      byte shadeMode = 1, bool wireframe = true) {
+      // Pack vertices: 6 floats per vertex (position xyz + normal xyz)
+      ImmutableArray<Mesh3.Node> verts = mesh.Vertex;
+      float[] data = new float[verts.Length * 6];
+      for (int i = 0; i < verts.Length; i++) {
+         Mesh3.Node node = verts[i];
+         int off = i * 6;
+         data[off] = node.Pos.X;
+         data[off + 1] = node.Pos.Y;
+         data[off + 2] = node.Pos.Z;
+         data[off + 3] = (float)node.Vec.X;
+         data[off + 4] = (float)node.Vec.Y;
+         data[off + 5] = (float)node.Vec.Z;
+      }
+
+      // Pack triangle indices (already groups of 3)
+      int[] indices = mesh.Triangle.ToArray ();
+
+      // Extract wireframe edge indices
+      int[] wireIndices;
+      if (wireframe && mesh.Wire.Length > 0) {
+         wireIndices = mesh.Wire.ToArray ();
+      } else if (wireframe) {
+         // Compute unique edges from triangles
+         HashSet<(int A, int B)> edgeSet = new ();
+         List<int> edges = new ();
+         for (int i = 0; i < indices.Length; i += 3) {
+            int a = indices[i], b = indices[i + 1], c = indices[i + 2];
+            AddEdge (a, b); AddEdge (b, c); AddEdge (c, a);
+
+            void AddEdge (int t1, int t2) {
+               if (t1 > t2) (t1, t2) = (t2, t1);
+               if (edgeSet.Add ((t1, t2))) { edges.Add (t1); edges.Add (t2); }
+            }
+         }
+         wireIndices = edges.ToArray ();
+      } else {
+         wireIndices = [];
+      }
+
+      return new RenderPrimitive {
+         Type = EPrimType.Mesh3D,
+         Data = data,
+         Indices = indices,
+         WireIndices = wireIndices,
+         Color = rgba,
+         ShadeMode = shadeMode,
+      };
+   }
+
+   /// <summary>Pack 3D points into a Points3D render primitive</summary>
+   public static RenderPrimitive CapturePoints3 (IEnumerable<Point3> pts,
+      byte[] rgba, float pointSize = 4f) {
+      List<float> data = new ();
+      foreach (Point3 pt in pts) {
+         data.Add ((float)pt.X);
+         data.Add ((float)pt.Y);
+         data.Add ((float)pt.Z);
+      }
+      return new RenderPrimitive {
+         Type = EPrimType.Points3D,
+         Data = data.ToArray (),
+         Color = rgba,
+         PointSize = pointSize,
+      };
+   }
+
+   /// <summary>Pack 3D line pairs into a Lines3D render primitive</summary>
+   public static RenderPrimitive CaptureLines3 (IEnumerable<Point3> linePairs,
+      byte[] rgba, float lineWidth = 2f) {
+      List<float> data = new ();
+      foreach (Point3 pt in linePairs) {
+         data.Add ((float)pt.X);
+         data.Add ((float)pt.Y);
+         data.Add ((float)pt.Z);
+      }
+      return new RenderPrimitive {
+         Type = EPrimType.Lines3D,
+         Data = data.ToArray (),
+         Color = rgba,
+         LineWidth = lineWidth,
+      };
+   }
+
+   /// <summary>Discretize polygons into a Fill2D render primitive</summary>
+   public static RenderPrimitive CaptureFill2D (List<Poly> polys, byte[] rgba) {
+      List<float> data = new ();
+      List<int> indices = new ();
+      List<Point2> allPts = new ();
+
+      // Discretize all polys and collect points
+      List<List<Point2>> polyPts = new ();
+      foreach (Poly poly in polys) {
+         List<Point2> pts = new ();
+         poly.Discretize (pts, 0.1, 0.5411);
+         polyPts.Add (pts);
+         allPts.AddRange (pts);
+      }
+
+      if (allPts.Count == 0)
+         return new RenderPrimitive { Type = EPrimType.Fill2D, Data = [], Color = rgba };
+
+      // Compute overall midpoint as center vertex (index 0)
+      Bound2 bound = new (allPts);
+      Point2 mid = bound.Midpoint;
+      data.Add ((float)mid.X);
+      data.Add ((float)mid.Y);
+      int vertIdx = 1;
+
+      // Build triangle fan for each poly contour
+      foreach (List<Point2> pts in polyPts) {
+         if (pts.Count == 0) continue;
+         int firstIdx = vertIdx;
+         foreach (Point2 pt in pts) {
+            data.Add ((float)pt.X);
+            data.Add ((float)pt.Y);
+            vertIdx++;
+         }
+         // Fan indices: center, then all contour vertices, back to first, terminated by -1
+         indices.Add (0);
+         for (int i = firstIdx; i < vertIdx; i++)
+            indices.Add (i);
+         indices.Add (firstIdx);
+         indices.Add (-1);
+      }
+
+      return new RenderPrimitive {
+         Type = EPrimType.Fill2D,
+         Data = data.ToArray (),
+         Indices = indices.ToArray (),
+         Color = rgba,
+         BoundData = [(float)bound.X.Min, (float)bound.Y.Min, (float)bound.X.Max, (float)bound.Y.Max],
+      };
    }
 }
