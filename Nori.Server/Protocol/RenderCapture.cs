@@ -283,7 +283,7 @@ public class RenderCapture {
       Mesh3 mesh = surf.Mesh;
       if (mesh.Vertex.Length == 0) return null;
       byte[] rgba = [255, 255, 255, 255];
-      byte shadeMode = surf.IsTranslucent ? (byte)2 : (byte)1; // Glass=2, Phong=1
+      byte shadeMode = surf.IsTranslucent ? (byte)4 : (byte)1; // Glass=4, Phong=1
       return CaptureMesh (mesh, rgba, shadeMode);
    }
 
